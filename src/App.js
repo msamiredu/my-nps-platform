@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Route, Routes, useParams } from 'react-router-dom';
 import { Survey } from 'survey-react';
 import 'survey-react/survey.min.css';
 import axios from 'axios';
 
-function App() {
+function SurveyEditor() {
   const [surveyJson, setSurveyJson] = useState({ elements: [] });
   const [questionType, setQuestionType] = useState('text');
   const [questionTitle, setQuestionTitle] = useState('');
@@ -20,7 +21,7 @@ function App() {
     setSurveyJson({
       elements: [...surveyJson.elements, newQuestion]
     });
-    setQuestionTitle(''); // Reset input
+    setQuestionTitle('');
   };
 
   const saveSurvey = async () => {
@@ -71,6 +72,53 @@ function App() {
       </div>
       {surveyJson.elements.length > 0 && <Survey json={surveyJson} onComplete={onComplete} />}
     </div>
+  );
+}
+
+function SurveyPage() {
+  const { id } = useParams();
+  const [surveyJson, setSurveyJson] = useState(null);
+
+  useEffect(() => {
+    axios.get(`http://localhost:5000/api/surveys/${id}`)
+      .then(response => {
+        setSurveyJson(response.data);
+      })
+      .catch(error => {
+        console.error('Error fetching survey:', error);
+        setSurveyJson({ elements: [{ type: 'text', name: 'error', title: 'Survey not found' }] });
+      });
+  }, [id]);
+
+  const onComplete = async (survey) => {
+    try {
+      await axios.post('http://localhost:5000/api/responses', {
+        surveyId: id,
+        data: survey.data
+      });
+      alert('Response saved!');
+    } catch (error) {
+      console.error('Error saving response:', error);
+      alert('Failed to save response');
+    }
+  };
+
+  return (
+    <div>
+      <h1>Take the Survey</h1>
+      {surveyJson ? <Survey json={surveyJson} onComplete={onComplete} /> : <p>Loading...</p>}
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<SurveyEditor />} />
+        <Route path="/survey/:id" element={<SurveyPage />} />
+      </Routes>
+    </Router>
   );
 }
 
