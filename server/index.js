@@ -29,7 +29,7 @@ app.get('/api/surveys', (req, res) => {
 app.post('/api/surveys', (req, res) => {
   try {
     const surveys = JSON.parse(fs.readFileSync(surveysFile));
-    const newSurvey = { id: Date.now().toString(), ...req.body }; // Ensure id is a string
+    const newSurvey = { id: Date.now().toString(), ...req.body }; // Ensure new IDs are strings
     surveys.push(newSurvey);
     fs.writeFileSync(surveysFile, JSON.stringify(surveys));
     res.json(newSurvey);
@@ -42,7 +42,7 @@ app.post('/api/surveys', (req, res) => {
 app.get('/api/surveys/:id', (req, res) => {
   try {
     const surveys = JSON.parse(fs.readFileSync(surveysFile));
-    const survey = surveys.find(s => s.id === req.params.id); // Compare as strings
+    const survey = surveys.find(s => s.id.toString() === req.params.id); // Compare as strings
     res.json(survey || {});
   } catch (error) {
     console.error('Error in GET /api/surveys/:id:', error);
@@ -56,7 +56,7 @@ app.get('/api/responses', (req, res) => {
     const surveys = JSON.parse(fs.readFileSync(surveysFile));
     const responses = JSON.parse(fs.readFileSync(responsesFile));
     const userResponses = userId ? responses.filter(r => {
-      const survey = surveys.find(s => s.id === r.surveyId.toString()); // Ensure string comparison
+      const survey = surveys.find(s => s.id.toString() === r.surveyId); // Fix: Convert s.id to string
       return survey && survey.userId === userId;
     }) : responses;
     res.json(userResponses);
