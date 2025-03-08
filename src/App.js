@@ -53,7 +53,7 @@ function SurveyEditor({ user }) {
   const [questionType, setQuestionType] = useState('text');
   const [questionTitle, setQuestionTitle] = useState('');
   const [surveyId, setSurveyId] = useState(null);
-  const navigate = useNavigate(); // For navigation
+  const navigate = useNavigate();
 
   const addQuestion = () => {
     let newQuestion = { name: `q${surveyJson.elements.length + 1}`, title: questionTitle };
@@ -126,15 +126,21 @@ function SurveyEditor({ user }) {
 function Dashboard({ user }) {
   const [surveys, setSurveys] = useState([]);
   const [responses, setResponses] = useState([]);
-  const navigate = useNavigate(); // For navigation
+  const navigate = useNavigate();
 
   useEffect(() => {
     axios.get(`http://localhost:5000/api/surveys?userId=${user.uid}`)
-      .then(response => setSurveys(response.data))
+      .then(response => {
+        console.log('Fetched surveys:', response.data); // Debug surveys
+        setSurveys(response.data);
+      })
       .catch(error => console.error('Error fetching surveys:', error));
 
     axios.get(`http://localhost:5000/api/responses?userId=${user.uid}`)
-      .then(response => setResponses(response.data))
+      .then(response => {
+        console.log('Fetched responses:', response.data); // Debug responses
+        setResponses(response.data);
+      })
       .catch(error => console.error('Error fetching responses:', error));
   }, [user.uid]);
 
@@ -153,13 +159,17 @@ function Dashboard({ user }) {
         ))}
       </ul>
       <h2>Responses</h2>
-      <ul>
-        {responses.map((response, index) => (
-          <li key={index}>
-            Survey ID: {response.surveyId} | Data: {JSON.stringify(response.data)} | Time: {response.timestamp}
-          </li>
-        ))}
-      </ul>
+      {responses.length === 0 ? (
+        <p>No responses yet.</p>
+      ) : (
+        <ul>
+          {responses.map((response, index) => (
+            <li key={index}>
+              Survey ID: {response.surveyId} | Data: {JSON.stringify(response.data)} | Time: {response.timestamp}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -205,13 +215,13 @@ function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      console.log('Auth state changed:', currentUser ? currentUser.uid : 'null'); // Debug user state
+      console.log('Auth state changed:', currentUser ? currentUser.uid : 'null');
       setUser(currentUser);
     });
     return () => unsubscribe();
   }, []);
 
-  console.log('Current user in App:', user ? user.uid : 'null'); // Debug user on render
+  console.log('Current user in App:', user ? user.uid : 'null');
 
   return (
     <Router>
