@@ -1,10 +1,54 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Route, Routes, useParams } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useParams, Navigate } from 'react-router-dom';
 import { Survey } from 'survey-react';
 import 'survey-react/survey.min.css';
 import axios from 'axios';
+import { auth } from './firebase';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 
-function SurveyEditor() {
+function LoginPage({ setUser }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSignup, setIsSignup] = useState(false);
+
+  const handleAuth = async () => {
+    try {
+      if (isSignup) {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        setUser(userCredential.user);
+      } else {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        setUser(userCredential.user);
+      }
+    } catch (error) {
+      alert(error.message);
+    }
+  };
+
+  return (
+    <div>
+      <h1>{isSignup ? 'Sign Up' : 'Log In'}</h1>
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="Email"
+      />
+      <input
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        placeholder="Password"
+      />
+      <button onClick={handleAuth}>{isSignup ? 'Sign Up' : 'Log In'}</button>
+      <button onClick={() => setIsSignup(!isSignup)}>
+        {isSignup ? 'Switch to Log In' : 'Switch to Sign Up'}
+      </button>
+    </div>
+  );
+}
+
+function SurveyEditor({ user }) {
   const [surveyJson, setSurveyJson] = useState({ elements: [] });
   const [questionType, setQuestionType] = useState('text');
   const [questionTitle, setQuestionTitle] = useState('');
@@ -26,7 +70,10 @@ function SurveyEditor() {
 
   const saveSurvey = async () => {
     try {
-      const response = await axios.post('http://localhost:5000/api/surveys', surveyJson);
+      const response = await axios.post('http://localhost:5000/api/surveys', {
+        ...surveyJson,
+        userId: user.uid // Tie survey to the user
+      });
       setSurveyId(response.data.id);
       alert(`Survey saved! Share this link: http://localhost:3000/survey/${response.data.id}`);
     } catch (error) {
@@ -47,14 +94,13 @@ function SurveyEditor() {
         console.error('Error saving response:', error);
         alert('Failed to save response');
       }
-    } else {
-      alert('Please save the survey first!');
     }
   };
 
   return (
     <div>
       <h1>My NPS Platform</h1>
+      <button onClick={() => signOut(auth)}>Log Out</button>
       <div>
         <h2>Create a Question</h2>
         <select value={questionType} onChange={(e) => setQuestionType(e.target.value)}>
@@ -112,10 +158,22 @@ function SurveyPage() {
 }
 
 function App() {
+  const [user, setUser] = useState(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
+
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<SurveyEditor />} />
+        <Route
+          path="/"
+          element={user ? <SurveyEditor user={user} /> : <LoginPage setUser={setUser} />}
+        />
         <Route path="/survey/:id" element={<SurveyPage />} />
       </Routes>
     </Router>
