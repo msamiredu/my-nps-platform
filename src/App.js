@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Route, Routes, useParams, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useParams, Navigate, useNavigate } from 'react-router-dom';
 import { Survey } from 'survey-react';
 import 'survey-react/survey.min.css';
 import axios from 'axios';
@@ -53,6 +53,7 @@ function SurveyEditor({ user }) {
   const [questionType, setQuestionType] = useState('text');
   const [questionTitle, setQuestionTitle] = useState('');
   const [surveyId, setSurveyId] = useState(null);
+  const navigate = useNavigate(); // For navigation
 
   const addQuestion = () => {
     let newQuestion = { name: `q${surveyJson.elements.length + 1}`, title: questionTitle };
@@ -101,7 +102,7 @@ function SurveyEditor({ user }) {
     <div>
       <h1>My NPS Platform - Editor</h1>
       <button onClick={() => signOut(auth)}>Log Out</button>
-      <button onClick={() => window.location.href = '/dashboard'}>Go to Dashboard</button>
+      <button onClick={() => navigate('/dashboard')}>Go to Dashboard</button>
       <div>
         <h2>Create a Question</h2>
         <select value={questionType} onChange={(e) => setQuestionType(e.target.value)}>
@@ -125,6 +126,7 @@ function SurveyEditor({ user }) {
 function Dashboard({ user }) {
   const [surveys, setSurveys] = useState([]);
   const [responses, setResponses] = useState([]);
+  const navigate = useNavigate(); // For navigation
 
   useEffect(() => {
     axios.get(`http://localhost:5000/api/surveys?userId=${user.uid}`)
@@ -140,7 +142,7 @@ function Dashboard({ user }) {
     <div>
       <h1>Dashboard</h1>
       <button onClick={() => signOut(auth)}>Log Out</button>
-      <button onClick={() => window.location.href = '/'}>Create New Survey</button>
+      <button onClick={() => navigate('/')}>Create New Survey</button>
       <h2>Your Surveys</h2>
       <ul>
         {surveys.map(survey => (
@@ -203,10 +205,13 @@ function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      console.log('Auth state changed:', currentUser ? currentUser.uid : 'null'); // Debug user state
       setUser(currentUser);
     });
     return () => unsubscribe();
   }, []);
+
+  console.log('Current user in App:', user ? user.uid : 'null'); // Debug user on render
 
   return (
     <Router>
