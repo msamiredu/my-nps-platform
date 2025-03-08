@@ -14,7 +14,6 @@ const responsesFile = path.join(__dirname, 'responses.json');
 if (!fs.existsSync(surveysFile)) fs.writeFileSync(surveysFile, JSON.stringify([]));
 if (!fs.existsSync(responsesFile)) fs.writeFileSync(responsesFile, JSON.stringify([]));
 
-// Get all surveys for a user
 app.get('/api/surveys', (req, res) => {
   try {
     const userId = req.query.userId;
@@ -27,11 +26,10 @@ app.get('/api/surveys', (req, res) => {
   }
 });
 
-// Create a new survey
 app.post('/api/surveys', (req, res) => {
   try {
     const surveys = JSON.parse(fs.readFileSync(surveysFile));
-    const newSurvey = { id: Date.now(), ...req.body };
+    const newSurvey = { id: Date.now().toString(), ...req.body }; // Ensure id is a string
     surveys.push(newSurvey);
     fs.writeFileSync(surveysFile, JSON.stringify(surveys));
     res.json(newSurvey);
@@ -41,11 +39,10 @@ app.post('/api/surveys', (req, res) => {
   }
 });
 
-// Get a survey by ID
 app.get('/api/surveys/:id', (req, res) => {
   try {
     const surveys = JSON.parse(fs.readFileSync(surveysFile));
-    const survey = surveys.find(s => s.id === parseInt(req.params.id));
+    const survey = surveys.find(s => s.id === req.params.id); // Compare as strings
     res.json(survey || {});
   } catch (error) {
     console.error('Error in GET /api/surveys/:id:', error);
@@ -53,14 +50,13 @@ app.get('/api/surveys/:id', (req, res) => {
   }
 });
 
-// Get responses for a user
 app.get('/api/responses', (req, res) => {
   try {
     const userId = req.query.userId;
-    const surveys = JSON.parse(fs.readFileSync(surveysFile)); // Define surveys here
+    const surveys = JSON.parse(fs.readFileSync(surveysFile));
     const responses = JSON.parse(fs.readFileSync(responsesFile));
     const userResponses = userId ? responses.filter(r => {
-      const survey = surveys.find(s => s.id === r.surveyId);
+      const survey = surveys.find(s => s.id === r.surveyId.toString()); // Ensure string comparison
       return survey && survey.userId === userId;
     }) : responses;
     res.json(userResponses);
@@ -70,7 +66,6 @@ app.get('/api/responses', (req, res) => {
   }
 });
 
-// Save a survey response
 app.post('/api/responses', (req, res) => {
   try {
     const responses = JSON.parse(fs.readFileSync(responsesFile));
