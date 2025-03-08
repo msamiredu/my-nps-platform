@@ -72,7 +72,7 @@ function SurveyEditor({ user }) {
     try {
       const response = await axios.post('http://localhost:5000/api/surveys', {
         ...surveyJson,
-        userId: user.uid // Tie survey to the user
+        userId: user.uid
       });
       setSurveyId(response.data.id);
       alert(`Survey saved! Share this link: http://localhost:3000/survey/${response.data.id}`);
@@ -99,8 +99,9 @@ function SurveyEditor({ user }) {
 
   return (
     <div>
-      <h1>My NPS Platform</h1>
+      <h1>My NPS Platform - Editor</h1>
       <button onClick={() => signOut(auth)}>Log Out</button>
+      <button onClick={() => window.location.href = '/dashboard'}>Go to Dashboard</button>
       <div>
         <h2>Create a Question</h2>
         <select value={questionType} onChange={(e) => setQuestionType(e.target.value)}>
@@ -117,6 +118,46 @@ function SurveyEditor({ user }) {
         <button onClick={saveSurvey}>Save Survey</button>
       </div>
       {surveyJson.elements.length > 0 && <Survey json={surveyJson} onComplete={onComplete} />}
+    </div>
+  );
+}
+
+function Dashboard({ user }) {
+  const [surveys, setSurveys] = useState([]);
+  const [responses, setResponses] = useState([]);
+
+  useEffect(() => {
+    axios.get(`http://localhost:5000/api/surveys?userId=${user.uid}`)
+      .then(response => setSurveys(response.data))
+      .catch(error => console.error('Error fetching surveys:', error));
+
+    axios.get(`http://localhost:5000/api/responses?userId=${user.uid}`)
+      .then(response => setResponses(response.data))
+      .catch(error => console.error('Error fetching responses:', error));
+  }, [user.uid]);
+
+  return (
+    <div>
+      <h1>Dashboard</h1>
+      <button onClick={() => signOut(auth)}>Log Out</button>
+      <button onClick={() => window.location.href = '/'}>Create New Survey</button>
+      <h2>Your Surveys</h2>
+      <ul>
+        {surveys.map(survey => (
+          <li key={survey.id}>
+            Survey ID: {survey.id} | Questions: {survey.elements.length} | 
+            Link: <a href={`/survey/${survey.id}`}>{`http://localhost:3000/survey/${survey.id}`}</a>
+          </li>
+        ))}
+      </ul>
+      <h2>Responses</h2>
+      <ul>
+        {responses.map((response, index) => (
+          <li key={index}>
+            Survey ID: {response.surveyId} | Data: {JSON.stringify(response.data)} | Time: {response.timestamp}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -173,6 +214,10 @@ function App() {
         <Route
           path="/"
           element={user ? <SurveyEditor user={user} /> : <LoginPage setUser={setUser} />}
+        />
+        <Route
+          path="/dashboard"
+          element={user ? <Dashboard user={user} /> : <Navigate to="/" />}
         />
         <Route path="/survey/:id" element={<SurveyPage />} />
       </Routes>
