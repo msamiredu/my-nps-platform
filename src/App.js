@@ -26,24 +26,36 @@ function LoginPage({ setUser }) {
   };
 
   return (
-    <div>
-      <h1>{isSignup ? 'Sign Up' : 'Log In'}</h1>
-      <input
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="Email"
-      />
-      <input
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        placeholder="Password"
-      />
-      <button onClick={handleAuth}>{isSignup ? 'Sign Up' : 'Log In'}</button>
-      <button onClick={() => setIsSignup(!isSignup)}>
-        {isSignup ? 'Switch to Log In' : 'Switch to Sign Up'}
-      </button>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <h1 className="text-2xl font-bold mb-6 text-center">{isSignup ? 'Sign Up' : 'Log In'}</h1>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email"
+          className="w-full p-2 mb-4 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password"
+          className="w-full p-2 mb-4 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button
+          onClick={handleAuth}
+          className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
+        >
+          {isSignup ? 'Sign Up' : 'Log In'}
+        </button>
+        <button
+          onClick={() => setIsSignup(!isSignup)}
+          className="w-full mt-2 text-blue-500 hover:underline"
+        >
+          {isSignup ? 'Switch to Log In' : 'Switch to Sign Up'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -99,26 +111,57 @@ function SurveyEditor({ user }) {
   };
 
   return (
-    <div>
-      <h1>My NPS Platform - Editor</h1>
-      <button onClick={() => signOut(auth)}>Log Out</button>
-      <button onClick={() => navigate('/dashboard')}>Go to Dashboard</button>
-      <div>
-        <h2>Create a Question</h2>
-        <select value={questionType} onChange={(e) => setQuestionType(e.target.value)}>
-          <option value="text">Text</option>
-          <option value="radiogroup">Rating (0-10)</option>
-        </select>
-        <input
-          type="text"
-          value={questionTitle}
-          onChange={(e) => setQuestionTitle(e.target.value)}
-          placeholder="Enter question title"
-        />
-        <button onClick={addQuestion}>Add Question</button>
-        <button onClick={saveSurvey}>Save Survey</button>
+    <div className="min-h-screen bg-gray-100">
+      <nav className="bg-blue-500 p-4 text-white">
+        <div className="container mx-auto flex justify-between items-center">
+          <h1 className="text-xl font-bold">My NPS Platform</h1>
+          <div>
+            <button onClick={() => navigate('/dashboard')} className="mr-4 hover:underline">Dashboard</button>
+            <button onClick={() => signOut(auth)} className="hover:underline">Log Out</button>
+          </div>
+        </div>
+      </nav>
+      <div className="container mx-auto p-6">
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h2 className="text-xl font-semibold mb-4">Create a Question</h2>
+          <div className="flex space-x-4 mb-4">
+            <select
+              value={questionType}
+              onChange={(e) => setQuestionType(e.target.value)}
+              className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="text">Text</option>
+              <option value="radiogroup">Rating (0-10)</option>
+            </select>
+            <input
+              type="text"
+              value={questionTitle}
+              onChange={(e) => setQuestionTitle(e.target.value)}
+              placeholder="Enter question title"
+              className="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex space-x-4">
+            <button
+              onClick={addQuestion}
+              className="bg-green-500 text-white p-2 rounded hover:bg-green-600"
+            >
+              Add Question
+            </button>
+            <button
+              onClick={saveSurvey}
+              className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
+            >
+              Save Survey
+            </button>
+          </div>
+          {surveyJson.elements.length > 0 && (
+            <div className="mt-6">
+              <Survey json={surveyJson} onComplete={onComplete} />
+            </div>
+          )}
+        </div>
       </div>
-      {surveyJson.elements.length > 0 && <Survey json={surveyJson} onComplete={onComplete} />}
     </div>
   );
 }
@@ -130,46 +173,63 @@ function Dashboard({ user }) {
 
   useEffect(() => {
     axios.get(`http://localhost:5000/api/surveys?userId=${user.uid}`)
-      .then(response => {
-        console.log('Fetched surveys:', response.data); // Debug surveys
-        setSurveys(response.data);
-      })
+      .then(response => setSurveys(response.data))
       .catch(error => console.error('Error fetching surveys:', error));
 
     axios.get(`http://localhost:5000/api/responses?userId=${user.uid}`)
-      .then(response => {
-        console.log('Fetched responses:', response.data); // Debug responses
-        setResponses(response.data);
-      })
+      .then(response => setResponses(response.data))
       .catch(error => console.error('Error fetching responses:', error));
   }, [user.uid]);
 
   return (
-    <div>
-      <h1>Dashboard</h1>
-      <button onClick={() => signOut(auth)}>Log Out</button>
-      <button onClick={() => navigate('/')}>Create New Survey</button>
-      <h2>Your Surveys</h2>
-      <ul>
-        {surveys.map(survey => (
-          <li key={survey.id}>
-            Survey ID: {survey.id} | Questions: {survey.elements.length} | 
-            Link: <a href={`/survey/${survey.id}`}>{`http://localhost:3000/survey/${survey.id}`}</a>
-          </li>
-        ))}
-      </ul>
-      <h2>Responses</h2>
-      {responses.length === 0 ? (
-        <p>No responses yet.</p>
-      ) : (
-        <ul>
-          {responses.map((response, index) => (
-            <li key={index}>
-              Survey ID: {response.surveyId} | Data: {JSON.stringify(response.data)} | Time: {response.timestamp}
-            </li>
-          ))}
-        </ul>
-      )}
+    <div className="min-h-screen bg-gray-100">
+      <nav className="bg-blue-500 p-4 text-white">
+        <div className="container mx-auto flex justify-between items-center">
+          <h1 className="text-xl font-bold">My NPS Platform</h1>
+          <div>
+            <button onClick={() => navigate('/')} className="mr-4 hover:underline">Create Survey</button>
+            <button onClick={() => signOut(auth)} className="hover:underline">Log Out</button>
+          </div>
+        </div>
+      </nav>
+      <div className="container mx-auto p-6">
+        <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <h2 className="text-xl font-semibold mb-4">Your Surveys</h2>
+            {surveys.length === 0 ? (
+              <p>No surveys yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {surveys.map(survey => (
+                  <li key={survey.id} className="border-b py-2">
+                    <span className="font-medium">ID: {survey.id}</span> | Questions: {survey.elements.length} | 
+                    <a href={`/survey/${survey.id}`} className="text-blue-500 hover:underline">
+                      {`http://localhost:3000/survey/${survey.id}`}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="bg-white p-6 rounded-lg shadow-md">
+            <h2 className="text-xl font-semibold mb-4">Responses</h2>
+            {responses.length === 0 ? (
+              <p>No responses yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {responses.map((response, index) => (
+                  <li key={index} className="border-b py-2">
+                    <span className="font-medium">Survey ID: {response.surveyId}</span> | 
+                    Data: {JSON.stringify(response.data)} | 
+                    Time: {new Date(response.timestamp).toLocaleString()}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -180,9 +240,7 @@ function SurveyPage() {
 
   useEffect(() => {
     axios.get(`http://localhost:5000/api/surveys/${id}`)
-      .then(response => {
-        setSurveyJson(response.data);
-      })
+      .then(response => setSurveyJson(response.data))
       .catch(error => {
         console.error('Error fetching survey:', error);
         setSurveyJson({ elements: [{ type: 'text', name: 'error', title: 'Survey not found' }] });
@@ -203,9 +261,11 @@ function SurveyPage() {
   };
 
   return (
-    <div>
-      <h1>Take the Survey</h1>
-      {surveyJson ? <Survey json={surveyJson} onComplete={onComplete} /> : <p>Loading...</p>}
+    <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-2xl">
+        <h1 className="text-2xl font-bold mb-6 text-center">Take the Survey</h1>
+        {surveyJson ? <Survey json={surveyJson} onComplete={onComplete} /> : <p>Loading...</p>}
+      </div>
     </div>
   );
 }
@@ -215,13 +275,10 @@ function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      console.log('Auth state changed:', currentUser ? currentUser.uid : 'null');
       setUser(currentUser);
     });
     return () => unsubscribe();
   }, []);
-
-  console.log('Current user in App:', user ? user.uid : 'null');
 
   return (
     <Router>
