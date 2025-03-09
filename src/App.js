@@ -64,7 +64,10 @@ function SurveyEditor({ user }) {
   const [surveyJson, setSurveyJson] = useState({ elements: [] });
   const [questionType, setQuestionType] = useState('text');
   const [questionTitle, setQuestionTitle] = useState('');
-  const [choices, setChoices] = useState(''); // For custom options
+  const [choices, setChoices] = useState('');
+  const [hasComment, setHasComment] = useState(false);
+  const [commentDisplay, setCommentDisplay] = useState('comment'); // 'choice' or 'comment'
+  const [commentLabel, setCommentLabel] = useState('Other (please specify)');
   const [surveyId, setSurveyId] = useState(null);
   const navigate = useNavigate();
 
@@ -97,11 +100,24 @@ function SurveyEditor({ user }) {
         newQuestion.type = 'text';
     }
 
+    if (hasComment) {
+      if (commentDisplay === 'choice') {
+        newQuestion.choices = [...(newQuestion.choices || []), { value: 'other', text: commentLabel }];
+        newQuestion.hasOther = true;
+      } else if (commentDisplay === 'comment') {
+        newQuestion.hasComment = true;
+        newQuestion.commentLabel = commentLabel;
+      }
+    }
+
     setSurveyJson({
       elements: [...surveyJson.elements, newQuestion]
     });
     setQuestionTitle('');
     setChoices('');
+    setHasComment(false);
+    setCommentDisplay('comment');
+    setCommentLabel('Other (please specify)');
   };
 
   const saveSurvey = async () => {
@@ -175,6 +191,44 @@ function SurveyEditor({ user }) {
                 placeholder="Enter choices (comma-separated, e.g., Yes,No,Maybe)"
                 className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+            )}
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={hasComment}
+                onChange={(e) => setHasComment(e.target.checked)}
+                className="h-4 w-4 text-blue-500 focus:ring-blue-500"
+              />
+              <label className="text-sm">Add Comment/Other Box</label>
+            </div>
+            {hasComment && (
+              <div className="ml-6 space-y-2">
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="radio"
+                    value="choice"
+                    checked={commentDisplay === 'choice'}
+                    onChange={(e) => setCommentDisplay(e.target.value)}
+                    className="h-4 w-4 text-blue-500 focus:ring-blue-500"
+                  />
+                  <label>Display as answer choice</label>
+                  <input
+                    type="radio"
+                    value="comment"
+                    checked={commentDisplay === 'comment'}
+                    onChange={(e) => setCommentDisplay(e.target.value)}
+                    className="h-4 w-4 text-blue-500 focus:ring-blue-500 ml-4"
+                  />
+                  <label>Display as comment field</label>
+                </div>
+                <input
+                  type="text"
+                  value={commentLabel}
+                  onChange={(e) => setCommentLabel(e.target.value)}
+                  placeholder="Label (e.g., Other (please specify))"
+                  className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
             )}
             <div className="flex space-x-4">
               <button
