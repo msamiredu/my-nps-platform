@@ -5,6 +5,11 @@ import 'survey-react/survey.min.css';
 import axios from 'axios';
 import { auth } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { Bar } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
+
+// Register Chart.js components
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 function LoginPage({ setUser }) {
   const [email, setEmail] = useState('');
@@ -102,13 +107,11 @@ function SurveyEditor({ user }) {
 
     if (hasComment) {
       if (commentDisplay === 'choice') {
-        // Rely on hasOther and otherText for free-text "other" option, avoid adding to choices
         newQuestion.hasOther = true;
-        newQuestion.otherText = commentLabel; // Set the label for the "other" option
-        // Do not add { value: 'other', text: commentLabel } to choices
+        newQuestion.otherText = commentLabel;
       } else if (commentDisplay === 'comment') {
         newQuestion.hasComment = true;
-        newQuestion.commentText = commentLabel; // Use commentText for label
+        newQuestion.commentText = commentLabel;
       }
     }
 
@@ -273,6 +276,117 @@ function Dashboard({ user }) {
       .catch(error => console.error('Error fetching responses:', error));
   }, [user.uid]);
 
+  // Process responses for a given survey
+  const processSurveyResults = (surveyId) => {
+    const survey = surveys.find(s => s.id === surveyId);
+    if (!survey) return null;
+
+    const surveyResponses = responses.filter(r => r.surveyId === surveyId);
+    const questions = survey.elements;
+
+    const results = questions.map((question, index) => {
+      const questionResponses = surveyResponses.map(r => r.data[question.name]).filter(Boolean);
+      const commentResponses = surveyResponses
+        .map(r => r.data[`${question.name}-Comment`])
+        .filter(Boolean);
+
+      // Handle rating/multiple choice questions
+      if (question.type === 'radiogroup' || question.type === 'dropdown') {
+        const choiceCounts = {};
+        question.choices.forEach(choice => {
+          choiceCounts[choice.text] = 0;
+        });
+
+        if (question.hasOther) {
+          choiceCounts[question.otherText || 'Other'] = 0;
+        }
+
+        questionResponses.forEach(response => {
+          if (response === 'other') {
+            choiceCounts[question.otherText || 'Other'] += 1;
+          } else {
+            const choice = question.choices.find(c => c.value === response);
+            if (choice) choiceCounts[choice.text] += 1;
+          }
+        });
+
+        // Prepare data for bar chart
+        const chartData = {
+          labels: [...question.choices.map(c => c.text), ...(question.hasOther ? [question.otherText || 'Other'] : [])],
+          datasets: [
+            {
+              label: 'Responses',
+              data: [...question.choices.map(c => choiceCounts[c.text]), ...(question.hasOther ? [choiceCounts[question.otherText || 'Other']] : [])],
+              backgroundColor: 'rgba(75, 192, 192, 0.6)',
+              borderColor: 'rgba(75, 192, 192, 1)',
+              borderWidth: 1,
+            },
+          ],
+        };
+
+        return {
+          title: question.title,
+          type: question.type,
+          chartData,
+          comments: commentResponses,
+        };
+      }
+
+      // Handle checkbox questions
+      if (question.type === 'checkbox') {
+        const choiceCounts = {};
+        question.choices.forEach(choice => {
+          choiceCounts[choice.text] = 0;
+        });
+
+        if (question.hasOther) {
+          choiceCounts[question.otherText || 'Other'] = 0;
+        }
+
+        questionResponses.forEach(response => {
+          response.forEach(val => {
+            if (val === 'other') {
+              choiceCounts[question.otherText || 'Other'] += 1;
+            } else {
+              const choice = question.choices.find(c => c.value === val);
+              if (choice) choiceCounts[choice.text] += 1;
+            }
+          });
+        });
+
+        const chartData = {
+          labels: [...question.choices.map(c => c.text), ...(question.hasOther ? [question.otherText || 'Other'] : [])],
+          datasets: [
+            {
+              label: 'Responses',
+              data: [...question.choices.map(c => choiceCounts[c.text]), ...(question.hasOther ? [choiceCounts[question.otherText || 'Other']] : [])],
+              backgroundColor: 'rgba(153, 102, 255, 0.6)',
+              borderColor: 'rgba(153, 102, 255, 1)',
+              borderWidth: 1,
+            },
+          ],
+        };
+
+        return {
+          title: question.title,
+          type: question.type,
+          chartData,
+          comments: commentResponses,
+        };
+      }
+
+      // Handle text questions
+      return {
+        title: question.title,
+        type: question.type,
+        responses: questionResponses,
+        comments: commentResponses,
+      };
+    });
+
+    return { surveyId, questions: results };
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       <nav className="bg-blue-500 p-4 text-white">
@@ -286,7 +400,7 @@ function Dashboard({ user }) {
       </nav>
       <div className="container mx-auto p-6">
         <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6">
           <div className="bg-white p-6 rounded-lg shadow-md">
             <h2 className="text-xl font-semibold mb-4">Your Surveys</h2>
             {surveys.length === 0 ? (
@@ -304,21 +418,59 @@ function Dashboard({ user }) {
               </ul>
             )}
           </div>
+
           <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold mb-4">Responses</h2>
-            {responses.length === 0 ? (
-              <p>No responses yet.</p>
-            ) : (
-              <ul className="space-y-2">
-                {responses.map((response, index) => (
-                  <li key={index} className="border-b py-2">
-                    <span className="font-medium">Survey ID: {response.surveyId}</span> | 
-                    Data: {JSON.stringify(response.data)} | 
-                    Time: {new Date(response.timestamp).toLocaleString()}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <h2 className="text-xl font-semibold mb-4">Survey Results</h2>
+            {surveys.length === 0 ? (
+              <p>No surveys available to display results.</p>
+            ) : surveys.map(survey => {
+              const results = processSurveyResults(survey.id);
+              if (!results) return null;
+
+              return (
+                <div key={survey.id} className="mb-8">
+                  <h3 className="text-lg font-medium mb-4">Survey ID: {survey.id}</h3>
+                  {results.questions.map((questionResult, index) => (
+                    <div key={index} className="mb-6">
+                      <h4 className="text-md font-semibold">{questionResult.title}</h4>
+                      {questionResult.type === 'radiogroup' || questionResult.type === 'dropdown' || questionResult.type === 'checkbox' ? (
+                        <div className="mt-4">
+                          <Bar
+                            data={questionResult.chartData}
+                            options={{
+                              responsive: true,
+                              plugins: {
+                                legend: { position: 'top' },
+                                title: { display: true, text: 'Response Distribution' },
+                              },
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="mt-2">
+                          <p className="text-sm font-medium">Responses:</p>
+                          <ul className="list-disc pl-5">
+                            {questionResult.responses.map((resp, idx) => (
+                              <li key={idx} className="text-sm">{resp}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {questionResult.comments.length > 0 && (
+                        <div className="mt-4">
+                          <p className="text-sm font-medium">Comments:</p>
+                          <ul className="list-disc pl-5">
+                            {questionResult.comments.map((comment, idx) => (
+                              <li key={idx} className="text-sm">{comment}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
