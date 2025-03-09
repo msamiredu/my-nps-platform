@@ -64,21 +64,44 @@ function SurveyEditor({ user }) {
   const [surveyJson, setSurveyJson] = useState({ elements: [] });
   const [questionType, setQuestionType] = useState('text');
   const [questionTitle, setQuestionTitle] = useState('');
+  const [choices, setChoices] = useState(''); // For custom options
   const [surveyId, setSurveyId] = useState(null);
   const navigate = useNavigate();
 
   const addQuestion = () => {
     let newQuestion = { name: `q${surveyJson.elements.length + 1}`, title: questionTitle };
-    if (questionType === 'radiogroup') {
-      newQuestion.type = 'radiogroup';
-      newQuestion.choices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => ({ value: n, text: `${n}` }));
-    } else {
-      newQuestion.type = 'text';
+
+    switch (questionType) {
+      case 'text':
+        newQuestion.type = 'text';
+        break;
+      case 'radiogroup':
+        newQuestion.type = 'radiogroup';
+        newQuestion.choices = choices
+          ? choices.split(',').map(choice => ({ value: choice.trim(), text: choice.trim() }))
+          : [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => ({ value: n, text: `${n}` }));
+        break;
+      case 'dropdown':
+        newQuestion.type = 'dropdown';
+        newQuestion.choices = choices
+          ? choices.split(',').map(choice => ({ value: choice.trim(), text: choice.trim() }))
+          : ['Option 1', 'Option 2', 'Option 3'].map(opt => ({ value: opt, text: opt }));
+        break;
+      case 'checkbox':
+        newQuestion.type = 'checkbox';
+        newQuestion.choices = choices
+          ? choices.split(',').map(choice => ({ value: choice.trim(), text: choice.trim() }))
+          : ['Choice 1', 'Choice 2', 'Choice 3'].map(ch => ({ value: ch, text: ch }));
+        break;
+      default:
+        newQuestion.type = 'text';
     }
+
     setSurveyJson({
       elements: [...surveyJson.elements, newQuestion]
     });
     setQuestionTitle('');
+    setChoices('');
   };
 
   const saveSurvey = async () => {
@@ -124,36 +147,49 @@ function SurveyEditor({ user }) {
       <div className="container mx-auto p-6">
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4">Create a Question</h2>
-          <div className="flex space-x-4 mb-4">
-            <select
-              value={questionType}
-              onChange={(e) => setQuestionType(e.target.value)}
-              className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="text">Text</option>
-              <option value="radiogroup">Rating (0-10)</option>
-            </select>
-            <input
-              type="text"
-              value={questionTitle}
-              onChange={(e) => setQuestionTitle(e.target.value)}
-              placeholder="Enter question title"
-              className="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div className="flex space-x-4">
-            <button
-              onClick={addQuestion}
-              className="bg-green-500 text-white p-2 rounded hover:bg-green-600"
-            >
-              Add Question
-            </button>
-            <button
-              onClick={saveSurvey}
-              className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
-            >
-              Save Survey
-            </button>
+          <div className="space-y-4">
+            <div className="flex space-x-4">
+              <select
+                value={questionType}
+                onChange={(e) => setQuestionType(e.target.value)}
+                className="p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="text">Text</option>
+                <option value="radiogroup">Rating/Multiple Choice</option>
+                <option value="dropdown">Dropdown</option>
+                <option value="checkbox">Checkbox</option>
+              </select>
+              <input
+                type="text"
+                value={questionTitle}
+                onChange={(e) => setQuestionTitle(e.target.value)}
+                placeholder="Enter question title"
+                className="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            {(questionType === 'radiogroup' || questionType === 'dropdown' || questionType === 'checkbox') && (
+              <input
+                type="text"
+                value={choices}
+                onChange={(e) => setChoices(e.target.value)}
+                placeholder="Enter choices (comma-separated, e.g., Yes,No,Maybe)"
+                className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            )}
+            <div className="flex space-x-4">
+              <button
+                onClick={addQuestion}
+                className="bg-green-500 text-white p-2 rounded hover:bg-green-600"
+              >
+                Add Question
+              </button>
+              <button
+                onClick={saveSurvey}
+                className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
+              >
+                Save Survey
+              </button>
+            </div>
           </div>
           {surveyJson.elements.length > 0 && (
             <div className="mt-6">
