@@ -102,8 +102,10 @@ function SurveyEditor({ user }) {
 
     if (hasComment) {
       if (commentDisplay === 'choice') {
-        newQuestion.choices = [...(newQuestion.choices || []), { value: 'other', text: commentLabel }];
+        // Treat as a free-text "Other" option (not just another choice)
         newQuestion.hasOther = true;
+        newQuestion.otherText = commentLabel;
+        newQuestion.choices = [...(newQuestion.choices || []), { value: 'other', text: commentLabel }];
       } else if (commentDisplay === 'comment') {
         newQuestion.hasComment = true;
         newQuestion.commentLabel = commentLabel;
@@ -211,7 +213,7 @@ function SurveyEditor({ user }) {
                     onChange={(e) => setCommentDisplay(e.target.value)}
                     className="h-4 w-4 text-blue-500 focus:ring-blue-500"
                   />
-                  <label>Display as answer choice</label>
+                  <label>Display as answer choice (free-text)</label>
                   <input
                     type="radio"
                     value="comment"
