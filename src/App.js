@@ -102,13 +102,15 @@ function SurveyEditor({ user }) {
 
     if (hasComment) {
       if (commentDisplay === 'choice') {
-        // Treat as a free-text "Other" option (not just another choice)
+        // Add "other" as a free-text option, avoiding duplication
+        if (!newQuestion.choices.some(choice => choice.value === 'other')) {
+          newQuestion.choices = [...(newQuestion.choices || []), { value: 'other', text: commentLabel }];
+        }
         newQuestion.hasOther = true;
         newQuestion.otherText = commentLabel;
-        newQuestion.choices = [...(newQuestion.choices || []), { value: 'other', text: commentLabel }];
       } else if (commentDisplay === 'comment') {
         newQuestion.hasComment = true;
-        newQuestion.commentLabel = commentLabel;
+        newQuestion.commentLabel = commentLabel; // Ensure label is used
       }
     }
 
