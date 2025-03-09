@@ -102,16 +102,13 @@ function SurveyEditor({ user }) {
 
     if (hasComment) {
       if (commentDisplay === 'choice') {
-        // Add "other" as a free-text option, ensuring no duplication
+        // Rely on hasOther and otherText for free-text "other" option, avoid adding to choices
         newQuestion.hasOther = true;
         newQuestion.otherText = commentLabel; // Set the label for the "other" option
-        // Ensure "other" is not duplicated in choices
-        if (!newQuestion.choices.some(choice => choice.value === 'other')) {
-          newQuestion.choices = [...(newQuestion.choices || []), { value: 'other', text: commentLabel }];
-        }
+        // Do not add { value: 'other', text: commentLabel } to choices
       } else if (commentDisplay === 'comment') {
         newQuestion.hasComment = true;
-        newQuestion.commentText = commentLabel; // Use commentText as per survey-react docs
+        newQuestion.commentText = commentLabel; // Use commentText for label
       }
     }
 
