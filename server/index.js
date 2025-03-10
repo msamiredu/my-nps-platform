@@ -1,82 +1,97 @@
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
-const path = require('path');
 const app = express();
 const port = 5000;
 
-app.use(express.json());
 app.use(cors());
+app.use(express.json());
 
-const surveysFile = path.join(__dirname, 'surveys.json');
-const responsesFile = path.join(__dirname, 'responses.json');
+// Surveys data
+let surveys = [];
+let responses = [];
 
-if (!fs.existsSync(surveysFile)) fs.writeFileSync(surveysFile, JSON.stringify([]));
-if (!fs.existsSync(responsesFile)) fs.writeFileSync(responsesFile, JSON.stringify([]));
-
-app.get('/api/surveys', (req, res) => {
+// Load surveys from file
+const loadSurveys = () => {
   try {
-    const userId = req.query.userId;
-    const surveys = JSON.parse(fs.readFileSync(surveysFile));
-    const userSurveys = userId ? surveys.filter(s => s.userId === userId) : surveys;
-    res.json(userSurveys);
+    const data = fs.readFileSync('surveys.json', 'utf8');
+    surveys = JSON.parse(data);
   } catch (error) {
-    console.error('Error in GET /api/surveys:', error);
-    res.status(500).json({ error: 'Failed to fetch surveys' });
+    surveys = [];
+  }
+};
+
+// Load responses from file
+const loadResponses = () => {
+  try {
+    const data = fs.readFileSync('responses.json', 'utf8');
+    responses = JSON.parse(data);
+  } catch (error) {
+    responses = [];
+  }
+};
+
+// Save surveys to file
+const saveSurveys = () => {
+  fs.writeFileSync('surveys.json', JSON.stringify(surveys, null, 2));
+};
+
+// Save responses to file
+const saveResponses = () => {
+  fs.writeFileSync('responses.json', JSON.stringify(responses, null, 2));
+};
+
+// Initial load
+loadSurveys();
+loadResponses();
+
+// API endpoints
+app.get('/api/surveys', (req, res) => {
+  const userId = req.query.userId;
+  const userSurveys = surveys.filter(s => s.userId === userId);
+  res.json(userSurveys);
+});
+
+app.get('/api/surveys/:id', (req, res) => {
+  const survey = surveys.find(s => s.id === req.params.id);
+  if (survey) {
+    res.json(survey);
+  } else {
+    res.status(404).json({ error: 'Survey not found' });
   }
 });
 
 app.post('/api/surveys', (req, res) => {
-  try {
-    const surveys = JSON.parse(fs.readFileSync(surveysFile));
-    const newSurvey = { id: Date.now().toString(), ...req.body }; // Ensure new IDs are strings
-    surveys.push(newSurvey);
-    fs.writeFileSync(surveysFile, JSON.stringify(surveys));
-    res.json(newSurvey);
-  } catch (error) {
-    console.error('Error in POST /api/surveys:', error);
-    res.status(500).json({ error: 'Failed to save survey' });
-  }
-});
-
-app.get('/api/surveys/:id', (req, res) => {
-  try {
-    const surveys = JSON.parse(fs.readFileSync(surveysFile));
-    const survey = surveys.find(s => s.id.toString() === req.params.id); // Compare as strings
-    res.json(survey || {});
-  } catch (error) {
-    console.error('Error in GET /api/surveys/:id:', error);
-    res.status(500).json({ error: 'Failed to fetch survey' });
-  }
+  const newSurvey = {
+    id: Date.now().toString(),
+    ...req.body,
+    userId: req.body.userId,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  surveys.push(newSurvey);
+  saveSurveys();
+  res.json({ id: newSurvey.id });
 });
 
 app.get('/api/responses', (req, res) => {
-  try {
-    const userId = req.query.userId;
-    const surveys = JSON.parse(fs.readFileSync(surveysFile));
-    const responses = JSON.parse(fs.readFileSync(responsesFile));
-    const userResponses = userId ? responses.filter(r => {
-      const survey = surveys.find(s => s.id.toString() === r.surveyId); // Fix: Convert s.id to string
-      return survey && survey.userId === userId;
-    }) : responses;
-    res.json(userResponses);
-  } catch (error) {
-    console.error('Error in GET /api/responses:', error);
-    res.status(500).json({ error: 'Failed to fetch responses' });
-  }
+  const userId = req.query.userId;
+  const userResponses = responses.filter(r => {
+    const survey = surveys.find(s => s.id === r.surveyId);
+    return survey && survey.userId === userId;
+  });
+  res.json(userResponses);
 });
 
 app.post('/api/responses', (req, res) => {
-  try {
-    const responses = JSON.parse(fs.readFileSync(responsesFile));
-    const newResponse = { surveyId: req.body.surveyId, ...req.body.data, timestamp: new Date().toISOString() };
-    responses.push(newResponse);
-    fs.writeFileSync(responsesFile, JSON.stringify(responses));
-    res.json(newResponse);
-  } catch (error) {
-    console.error('Error in POST /api/responses:', error);
-    res.status(500).json({ error: 'Failed to save response' });
-  }
+  const newResponse = {
+    id: Date.now().toString(),
+    ...req.body,
+    timestamp: new Date().toISOString()
+  };
+  responses.push(newResponse);
+  saveResponses();
+  res.json({ message: 'Response saved' });
 });
 
 app.listen(port, () => {

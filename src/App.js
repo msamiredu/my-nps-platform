@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Route, Routes, useParams, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useParams, Navigate, useNavigate, Link } from 'react-router-dom';
 import { Survey } from 'survey-react';
 import 'survey-react/survey.min.css';
 import axios from 'axios';
@@ -66,12 +66,12 @@ function LoginPage({ setUser }) {
 }
 
 function SurveyEditor({ user }) {
-  const [surveyJson, setSurveyJson] = useState({ elements: [] });
+  const [surveyJson, setSurveyJson] = useState({ elements: [], title: '' });
   const [questionType, setQuestionType] = useState('text');
   const [questionTitle, setQuestionTitle] = useState('');
   const [choices, setChoices] = useState('');
   const [hasComment, setHasComment] = useState(false);
-  const [commentDisplay, setCommentDisplay] = useState('comment'); // 'choice' or 'comment'
+  const [commentDisplay, setCommentDisplay] = useState('comment');
   const [commentLabel, setCommentLabel] = useState('Other (please specify)');
   const [surveyId, setSurveyId] = useState(null);
   const navigate = useNavigate();
@@ -116,6 +116,7 @@ function SurveyEditor({ user }) {
     }
 
     setSurveyJson({
+      ...surveyJson,
       elements: [...surveyJson.elements, newQuestion]
     });
     setQuestionTitle('');
@@ -126,6 +127,10 @@ function SurveyEditor({ user }) {
   };
 
   const saveSurvey = async () => {
+    if (!surveyJson.title.trim()) {
+      alert('Please enter a survey title.');
+      return;
+    }
     try {
       const response = await axios.post('http://localhost:5000/api/surveys', {
         ...surveyJson,
@@ -133,6 +138,7 @@ function SurveyEditor({ user }) {
       });
       setSurveyId(response.data.id);
       alert(`Survey saved! Share this link: http://localhost:3000/survey/${response.data.id}`);
+      setSurveyJson({ elements: [], title: '' }); // Reset after saving
     } catch (error) {
       console.error('Error saving survey:', error);
       alert('Failed to save survey');
@@ -141,6 +147,10 @@ function SurveyEditor({ user }) {
 
   const onComplete = async (survey) => {
     if (surveyId) {
+      if (!survey.data || Object.keys(survey.data).length === 0) {
+        alert('No responses provided. Please answer at least one question.');
+        return;
+      }
       try {
         await axios.post('http://localhost:5000/api/responses', {
           surveyId,
@@ -167,8 +177,16 @@ function SurveyEditor({ user }) {
       </nav>
       <div className="container mx-auto p-6">
         <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4">Create a Question</h2>
+          <h2 className="text-xl font-semibold mb-4">Create a Survey</h2>
           <div className="space-y-4">
+            <input
+              type="text"
+              value={surveyJson.title}
+              onChange={(e) => setSurveyJson({ ...surveyJson, title: e.target.value })}
+              placeholder="Enter survey title"
+              className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <h3 className="text-lg font-medium mt-4">Add a Question</h3>
             <div className="flex space-x-4">
               <select
                 value={questionType}
@@ -272,11 +290,13 @@ function Dashboard({ user }) {
       .catch(error => console.error('Error fetching surveys:', error));
 
     axios.get(`http://localhost:5000/api/responses?userId=${user.uid}`)
-      .then(response => setResponses(response.data))
+      .then(response => {
+        console.log('Fetched responses:', response.data);
+        setResponses(response.data);
+      })
       .catch(error => console.error('Error fetching responses:', error));
   }, [user.uid]);
 
-  // Process responses for a given survey
   const processSurveyResults = (surveyId) => {
     const survey = surveys.find(s => s.id === surveyId);
     if (!survey) return null;
@@ -285,12 +305,13 @@ function Dashboard({ user }) {
     const questions = survey.elements;
 
     const results = questions.map((question, index) => {
-      const questionResponses = surveyResponses.map(r => r.data[question.name]).filter(Boolean);
+      const questionResponses = surveyResponses
+        .filter(r => r.data && r.data[question.name] !== undefined)
+        .map(r => r.data[question.name]);
       const commentResponses = surveyResponses
-        .map(r => r.data[`${question.name}-Comment`])
-        .filter(Boolean);
+        .filter(r => r.data && r.data[`${question.name}-Comment`] !== undefined)
+        .map(r => r.data[`${question.name}-Comment`]);
 
-      // Handle rating/multiple choice questions
       if (question.type === 'radiogroup' || question.type === 'dropdown') {
         const choiceCounts = {};
         question.choices.forEach(choice => {
@@ -310,7 +331,6 @@ function Dashboard({ user }) {
           }
         });
 
-        // Prepare data for bar chart
         const chartData = {
           labels: [...question.choices.map(c => c.text), ...(question.hasOther ? [question.otherText || 'Other'] : [])],
           datasets: [
@@ -332,7 +352,6 @@ function Dashboard({ user }) {
         };
       }
 
-      // Handle checkbox questions
       if (question.type === 'checkbox') {
         const choiceCounts = {};
         question.choices.forEach(choice => {
@@ -344,14 +363,16 @@ function Dashboard({ user }) {
         }
 
         questionResponses.forEach(response => {
-          response.forEach(val => {
-            if (val === 'other') {
-              choiceCounts[question.otherText || 'Other'] += 1;
-            } else {
-              const choice = question.choices.find(c => c.value === val);
-              if (choice) choiceCounts[choice.text] += 1;
-            }
-          });
+          if (Array.isArray(response)) {
+            response.forEach(val => {
+              if (val === 'other') {
+                choiceCounts[question.otherText || 'Other'] += 1;
+              } else {
+                const choice = question.choices.find(c => c.value === val);
+                if (choice) choiceCounts[choice.text] += 1;
+              }
+            });
+          }
         });
 
         const chartData = {
@@ -375,7 +396,6 @@ function Dashboard({ user }) {
         };
       }
 
-      // Handle text questions
       return {
         title: question.title,
         type: question.type,
@@ -406,13 +426,19 @@ function Dashboard({ user }) {
             {surveys.length === 0 ? (
               <p>No surveys yet.</p>
             ) : (
-              <ul className="space-y-2">
+              <ul className="space-y-4">
                 {surveys.map(survey => (
                   <li key={survey.id} className="border-b py-2">
-                    <span className="font-medium">ID: {survey.id}</span> | Questions: {survey.elements.length} | 
-                    <a href={`/survey/${survey.id}`} className="text-blue-500 hover:underline">
-                      {`http://localhost:3000/survey/${survey.id}`}
-                    </a>
+                    <Link
+                      to={`/survey/${survey.id}`}
+                      className="text-blue-500 hover:underline font-medium text-lg"
+                    >
+                      {survey.title || `Untitled Survey #${survey.id}`}
+                    </Link>
+                    <div className="text-sm text-gray-600 mt-1">
+                      ID: {survey.id} | Questions: {survey.elements.length} | 
+                      Last Updated: {new Date(survey.updatedAt || Date.now()).toLocaleString()}
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -429,7 +455,7 @@ function Dashboard({ user }) {
 
               return (
                 <div key={survey.id} className="mb-8">
-                  <h3 className="text-lg font-medium mb-4">Survey ID: {survey.id}</h3>
+                  <h3 className="text-lg font-medium mb-4">Survey: {survey.title || `Untitled Survey #${survey.id}`}</h3>
                   {results.questions.map((questionResult, index) => (
                     <div key={index} className="mb-6">
                       <h4 className="text-md font-semibold">{questionResult.title}</h4>
@@ -492,6 +518,10 @@ function SurveyPage() {
   }, [id]);
 
   const onComplete = async (survey) => {
+    if (!survey.data || Object.keys(survey.data).length === 0) {
+      alert('No responses provided. Please answer at least one question.');
+      return;
+    }
     try {
       await axios.post('http://localhost:5000/api/responses', {
         surveyId: id,
@@ -507,7 +537,7 @@ function SurveyPage() {
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
       <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-2xl">
-        <h1 className="text-2xl font-bold mb-6 text-center">Take the Survey</h1>
+        <h1 className="text-2xl font-bold mb-6 text-center">{surveyJson?.title || 'Untitled Survey'}</h1>
         {surveyJson ? <Survey json={surveyJson} onComplete={onComplete} /> : <p>Loading...</p>}
       </div>
     </div>
