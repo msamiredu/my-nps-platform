@@ -65,15 +65,28 @@ function LoginPage({ setUser }) {
   );
 }
 
-function SurveyEditor({ user, surveyId, initialSurvey }) {
-  const [surveyJson, setSurveyJson] = useState(initialSurvey || { elements: [], title: '' });
+function SurveyEditor({ user }) {
+  const { id } = useParams();
+  const [surveyJson, setSurveyJson] = useState({ elements: [], title: '' });
   const [questionType, setQuestionType] = useState('text');
   const [questionTitle, setQuestionTitle] = useState('');
   const [choices, setChoices] = useState('');
   const [hasComment, setHasComment] = useState(false);
   const [commentDisplay, setCommentDisplay] = useState('comment');
   const [commentLabel, setCommentLabel] = useState('Other (please specify)');
+  const [nonAnswerableText, setNonAnswerableText] = useState('');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (id) {
+      axios.get(`http://localhost:5000/api/surveys/${id}`)
+        .then(response => setSurveyJson(response.data))
+        .catch(error => {
+          console.error('Error fetching survey:', error);
+          setSurveyJson({ elements: [], title: '' });
+        });
+    }
+  }, [id]);
 
   const addQuestion = () => {
     let newQuestion = { name: `q${surveyJson.elements.length + 1}`, title: questionTitle };
@@ -100,11 +113,15 @@ function SurveyEditor({ user, surveyId, initialSurvey }) {
           ? choices.split(',').map(choice => ({ value: choice.trim(), text: choice.trim() }))
           : ['Choice 1', 'Choice 2', 'Choice 3'].map(ch => ({ value: ch, text: ch }));
         break;
+      case 'nonanswerable':
+        newQuestion.type = 'html'; // Use 'html' type for non-answerable content
+        newQuestion.html = nonAnswerableText;
+        break;
       default:
         newQuestion.type = 'text';
     }
 
-    if (hasComment) {
+    if (questionType !== 'nonanswerable' && hasComment) {
       if (commentDisplay === 'choice') {
         newQuestion.hasOther = true;
         newQuestion.otherText = commentLabel;
@@ -123,6 +140,7 @@ function SurveyEditor({ user, surveyId, initialSurvey }) {
     setHasComment(false);
     setCommentDisplay('comment');
     setCommentLabel('Other (please specify)');
+    setNonAnswerableText('');
   };
 
   const saveSurvey = async () => {
@@ -131,16 +149,14 @@ function SurveyEditor({ user, surveyId, initialSurvey }) {
       return;
     }
     try {
-      if (surveyId) {
-        // Update existing survey
-        await axios.put(`http://localhost:5000/api/surveys/${surveyId}`, {
+      if (id) {
+        await axios.put(`http://localhost:5000/api/surveys/${id}`, {
           ...surveyJson,
           userId: user.uid,
           updatedAt: new Date().toISOString()
         });
         alert('Survey updated!');
       } else {
-        // Create new survey
         const response = await axios.post('http://localhost:5000/api/surveys', {
           ...surveyJson,
           userId: user.uid
@@ -156,14 +172,14 @@ function SurveyEditor({ user, surveyId, initialSurvey }) {
   };
 
   const onComplete = async (survey) => {
-    if (surveyId) {
+    if (id) {
       if (!survey.data || Object.keys(survey.data).length === 0) {
         alert('No responses provided. Please answer at least one question.');
         return;
       }
       try {
         await axios.post('http://localhost:5000/api/responses', {
-          surveyId,
+          surveyId: id,
           data: survey.data
         });
         alert('Response saved!');
@@ -187,7 +203,7 @@ function SurveyEditor({ user, surveyId, initialSurvey }) {
       </nav>
       <div className="container mx-auto p-6">
         <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4">{surveyId ? 'Edit Survey' : 'Create a Survey'}</h2>
+          <h2 className="text-xl font-semibold mb-4">{id ? 'Edit Survey' : 'Create a Survey'}</h2>
           <div className="space-y-4">
             <input
               type="text"
@@ -196,7 +212,7 @@ function SurveyEditor({ user, surveyId, initialSurvey }) {
               placeholder="Enter survey title"
               className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <h3 className="text-lg font-medium mt-4">Add a Question</h3>
+            <h3 className="text-lg font-medium mt-4">Add a Question or Content</h3>
             <div className="flex space-x-4">
               <select
                 value={questionType}
@@ -207,14 +223,25 @@ function SurveyEditor({ user, surveyId, initialSurvey }) {
                 <option value="radiogroup">Rating/Multiple Choice</option>
                 <option value="dropdown">Dropdown</option>
                 <option value="checkbox">Checkbox</option>
+                <option value="nonanswerable">Non-Answerable Content</option>
               </select>
-              <input
-                type="text"
-                value={questionTitle}
-                onChange={(e) => setQuestionTitle(e.target.value)}
-                placeholder="Enter question title"
-                className="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+              {questionType === 'nonanswerable' ? (
+                <input
+                  type="text"
+                  value={nonAnswerableText}
+                  onChange={(e) => setNonAnswerableText(e.target.value)}
+                  placeholder="Enter non-answerable content"
+                  className="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              ) : (
+                <input
+                  type="text"
+                  value={questionTitle}
+                  onChange={(e) => setQuestionTitle(e.target.value)}
+                  placeholder="Enter question title"
+                  className="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              )}
             </div>
             {(questionType === 'radiogroup' || questionType === 'dropdown' || questionType === 'checkbox') && (
               <input
@@ -225,16 +252,18 @@ function SurveyEditor({ user, surveyId, initialSurvey }) {
                 className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             )}
-            <div className="flex items-center space-x-2">
-              <input
-                type="checkbox"
-                checked={hasComment}
-                onChange={(e) => setHasComment(e.target.checked)}
-                className="h-4 w-4 text-blue-500 focus:ring-blue-500"
-              />
-              <label className="text-sm">Add Comment/Other Box</label>
-            </div>
-            {hasComment && (
+            {questionType !== 'nonanswerable' && (
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={hasComment}
+                  onChange={(e) => setHasComment(e.target.checked)}
+                  className="h-4 w-4 text-blue-500 focus:ring-blue-500"
+                />
+                <label className="text-sm">Add Comment/Other Box</label>
+              </div>
+            )}
+            {hasComment && questionType !== 'nonanswerable' && (
               <div className="ml-6 space-y-2">
                 <div className="flex items-center space-x-2">
                   <input
@@ -268,13 +297,13 @@ function SurveyEditor({ user, surveyId, initialSurvey }) {
                 onClick={addQuestion}
                 className="bg-green-500 text-white p-2 rounded hover:bg-green-600"
               >
-                Add Question
+                {questionType === 'nonanswerable' ? 'Add Content' : 'Add Question'}
               </button>
               <button
                 onClick={saveSurvey}
                 className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
               >
-                {surveyId ? 'Update Survey' : 'Save Survey'}
+                {id ? 'Update Survey' : 'Save Survey'}
               </button>
             </div>
           </div>
@@ -296,12 +325,30 @@ function Dashboard({ user }) {
   useEffect(() => {
     axios.get(`http://localhost:5000/api/surveys?userId=${user.uid}`)
       .then(response => {
-        // Sort surveys by updatedAt (most recent first)
         const sortedSurveys = response.data.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
         setSurveys(sortedSurveys);
       })
       .catch(error => console.error('Error fetching surveys:', error));
   }, [user.uid]);
+
+  const handleDuplicate = async (survey) => {
+    try {
+      const newSurvey = {
+        ...survey,
+        id: Date.now().toString(),
+        title: `${survey.title || `Untitled Survey #${survey.id}`} Copy`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      await axios.post('http://localhost:5000/api/surveys', newSurvey);
+      const response = await axios.get(`http://localhost:5000/api/surveys?userId=${user.uid}`);
+      setSurveys(response.data.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)));
+      alert('Survey duplicated!');
+    } catch (error) {
+      console.error('Error duplicating survey:', error);
+      alert('Failed to duplicate survey');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -323,17 +370,25 @@ function Dashboard({ user }) {
           ) : (
             <ul className="space-y-4">
               {surveys.map(survey => (
-                <li key={survey.id} className="border-b py-2">
-                  <Link
-                    to={`/survey/${survey.id}/details`}
-                    className="text-blue-500 hover:underline font-medium text-lg"
-                  >
-                    {survey.title || `Untitled Survey #${survey.id}`}
-                  </Link>
-                  <div className="text-sm text-gray-600 mt-1">
-                    ID: {survey.id} | Questions: {survey.elements.length} | 
-                    Last Updated: {new Date(survey.updatedAt || Date.now()).toLocaleString()}
+                <li key={survey.id} className="border-b py-2 flex justify-between items-center">
+                  <div>
+                    <Link
+                      to={`/survey/${survey.id}/details`}
+                      className="text-blue-500 hover:underline font-medium text-lg"
+                    >
+                      {survey.title || `Untitled Survey #${survey.id}`}
+                    </Link>
+                    <div className="text-sm text-gray-600 mt-1">
+                      ID: {survey.id} | Questions: {survey.elements.length} | 
+                      Last Updated: {new Date(survey.updatedAt || Date.now()).toLocaleString()}
+                    </div>
                   </div>
+                  <button
+                    onClick={() => handleDuplicate(survey)}
+                    className="bg-yellow-500 text-white p-2 rounded hover:bg-yellow-600"
+                  >
+                    Duplicate
+                  </button>
                 </li>
               ))}
             </ul>
@@ -380,6 +435,24 @@ function SurveyDetailPage({ user }) {
     }
   };
 
+  const handleDuplicate = async () => {
+    try {
+      const newSurvey = {
+        ...survey,
+        id: Date.now().toString(),
+        title: `${survey.title || `Untitled Survey #${survey.id}`} Copy`,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      await axios.post('http://localhost:5000/api/surveys', newSurvey);
+      alert('Survey duplicated!');
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Error duplicating survey:', error);
+      alert('Failed to duplicate survey');
+    }
+  };
+
   if (!survey) return <p>Loading...</p>;
 
   return (
@@ -410,6 +483,12 @@ function SurveyDetailPage({ user }) {
               Delete Survey
             </button>
             <button
+              onClick={handleDuplicate}
+              className="bg-yellow-500 text-white p-2 rounded hover:bg-yellow-600"
+            >
+              Duplicate
+            </button>
+            <button
               onClick={() => navigate(`/survey/${id}/responses`)}
               className="bg-green-500 text-white p-2 rounded hover:bg-green-600"
             >
@@ -432,7 +511,7 @@ function SurveyResponsesPage() {
   const { id } = useParams();
   const [survey, setSurvey] = useState(null);
   const [responses, setResponses] = useState([]);
-  const [viewMode, setViewMode] = useState('summaries'); // 'summaries' or 'single'
+  const [viewMode, setViewMode] = useState('summaries');
   const [selectedResponse, setSelectedResponse] = useState(null);
 
   useEffect(() => {
@@ -456,6 +535,14 @@ function SurveyResponsesPage() {
 
     const questions = survey.elements;
     const results = questions.map((question, index) => {
+      if (question.type === 'html') {
+        return {
+          title: question.title,
+          type: question.type,
+          html: question.html
+        };
+      }
+
       const questionResponses = responses
         .filter(r => r.data && r.data[question.name] !== undefined)
         .map(r => r.data[question.name]);
@@ -599,39 +686,48 @@ function SurveyResponsesPage() {
             <div>
               {results.questions.map((questionResult, index) => (
                 <div key={index} className="mb-6">
-                  <h4 className="text-md font-semibold">{questionResult.title}</h4>
-                  {questionResult.type === 'radiogroup' || questionResult.type === 'dropdown' || questionResult.type === 'checkbox' ? (
-                    <div className="mt-4">
-                      <Bar
-                        data={questionResult.chartData}
-                        options={{
-                          responsive: true,
-                          plugins: {
-                            legend: { position: 'top' },
-                            title: { display: true, text: 'Response Distribution' },
-                          },
-                        }}
-                      />
-                    </div>
+                  {questionResult.type === 'html' ? (
+                    <div
+                      className="text-gray-700"
+                      dangerouslySetInnerHTML={{ __html: questionResult.html }}
+                    />
                   ) : (
-                    <div className="mt-2">
-                      <p className="text-sm font-medium">Responses:</p>
-                      <ul className="list-disc pl-5">
-                        {questionResult.responses.map((resp, idx) => (
-                          <li key={idx} className="text-sm">{resp}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {questionResult.comments.length > 0 && (
-                    <div className="mt-4">
-                      <p className="text-sm font-medium">Comments:</p>
-                      <ul className="list-disc pl-5">
-                        {questionResult.comments.map((comment, idx) => (
-                          <li key={idx} className="text-sm">{comment}</li>
-                        ))}
-                      </ul>
-                    </div>
+                    <>
+                      <h4 className="text-md font-semibold">{questionResult.title}</h4>
+                      {questionResult.type === 'radiogroup' || questionResult.type === 'dropdown' || questionResult.type === 'checkbox' ? (
+                        <div className="mt-4">
+                          <Bar
+                            data={questionResult.chartData}
+                            options={{
+                              responsive: true,
+                              plugins: {
+                                legend: { position: 'top' },
+                                title: { display: true, text: 'Response Distribution' },
+                              },
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="mt-2">
+                          <p className="text-sm font-medium">Responses:</p>
+                          <ul className="list-disc pl-5">
+                            {questionResult.responses.map((resp, idx) => (
+                              <li key={idx} className="text-sm">{resp}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {questionResult.comments.length > 0 && (
+                        <div className="mt-4">
+                          <p className="text-sm font-medium">Comments:</p>
+                          <ul className="list-disc pl-5">
+                            {questionResult.comments.map((comment, idx) => (
+                              <li key={idx} className="text-sm">{comment}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               ))}
@@ -667,22 +763,26 @@ function SurveyResponsesPage() {
                         <h3 className="text-lg font-medium mb-4">Response Details</h3>
                         <div className="text-sm text-gray-600 mb-4">
                           <p>Started: {new Date(selectedResponse.timestamp).toLocaleString()}</p>
-                          {/* IP Address placeholder (not captured currently) */}
                           <p>IP Address: Not available</p>
                         </div>
-                        {survey.elements.map((question, index) => (
-                          <div key={index} className="mb-4">
-                            <p className="font-semibold">Q{index + 1}: {question.title}</p>
-                            <p className="text-sm">
-                              {selectedResponse.data[question.name] || 'Not answered'}
-                            </p>
-                            {selectedResponse.data[`${question.name}-Comment`] && (
-                              <p className="text-sm mt-1">
-                                Comment: {selectedResponse.data[`${question.name}-Comment`]}
+                        {survey.elements.map((question, index) => {
+                          if (question.type === 'html') {
+                            return null; // Skip non-answerable content in response view
+                          }
+                          return (
+                            <div key={index} className="mb-4">
+                              <p className="font-semibold">Q{index + 1}: {question.title}</p>
+                              <p className="text-sm">
+                                {selectedResponse.data[question.name] || 'Not answered'}
                               </p>
-                            )}
-                          </div>
-                        ))}
+                              {selectedResponse.data[`${question.name}-Comment`] && (
+                                <p className="text-sm mt-1">
+                                  Comment: {selectedResponse.data[`${question.name}-Comment`]}
+                                </p>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : (
                       <p>Select a response to view details.</p>
@@ -765,7 +865,7 @@ function App() {
         />
         <Route
           path="/survey/:id/edit"
-          element={user ? <SurveyEditor user={user} surveyId={useParams().id} initialSurvey={null} /> : <Navigate to="/" />}
+          element={user ? <SurveyEditor user={user} /> : <Navigate to="/" />}
         />
         <Route
           path="/survey/:id/responses"
