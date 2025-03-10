@@ -65,15 +65,14 @@ function LoginPage({ setUser }) {
   );
 }
 
-function SurveyEditor({ user }) {
-  const [surveyJson, setSurveyJson] = useState({ elements: [], title: '' });
+function SurveyEditor({ user, surveyId, initialSurvey }) {
+  const [surveyJson, setSurveyJson] = useState(initialSurvey || { elements: [], title: '' });
   const [questionType, setQuestionType] = useState('text');
   const [questionTitle, setQuestionTitle] = useState('');
   const [choices, setChoices] = useState('');
   const [hasComment, setHasComment] = useState(false);
   const [commentDisplay, setCommentDisplay] = useState('comment');
   const [commentLabel, setCommentLabel] = useState('Other (please specify)');
-  const [surveyId, setSurveyId] = useState(null);
   const navigate = useNavigate();
 
   const addQuestion = () => {
@@ -132,13 +131,24 @@ function SurveyEditor({ user }) {
       return;
     }
     try {
-      const response = await axios.post('http://localhost:5000/api/surveys', {
-        ...surveyJson,
-        userId: user.uid
-      });
-      setSurveyId(response.data.id);
-      alert(`Survey saved! Share this link: http://localhost:3000/survey/${response.data.id}`);
-      setSurveyJson({ elements: [], title: '' }); // Reset after saving
+      if (surveyId) {
+        // Update existing survey
+        await axios.put(`http://localhost:5000/api/surveys/${surveyId}`, {
+          ...surveyJson,
+          userId: user.uid,
+          updatedAt: new Date().toISOString()
+        });
+        alert('Survey updated!');
+      } else {
+        // Create new survey
+        const response = await axios.post('http://localhost:5000/api/surveys', {
+          ...surveyJson,
+          userId: user.uid
+        });
+        alert(`Survey saved! Share this link: http://localhost:3000/survey/${response.data.id}`);
+      }
+      setSurveyJson({ elements: [], title: '' });
+      navigate('/dashboard');
     } catch (error) {
       console.error('Error saving survey:', error);
       alert('Failed to save survey');
@@ -177,7 +187,7 @@ function SurveyEditor({ user }) {
       </nav>
       <div className="container mx-auto p-6">
         <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4">Create a Survey</h2>
+          <h2 className="text-xl font-semibold mb-4">{surveyId ? 'Edit Survey' : 'Create a Survey'}</h2>
           <div className="space-y-4">
             <input
               type="text"
@@ -264,7 +274,7 @@ function SurveyEditor({ user }) {
                 onClick={saveSurvey}
                 className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
               >
-                Save Survey
+                {surveyId ? 'Update Survey' : 'Save Survey'}
               </button>
             </div>
           </div>
@@ -281,34 +291,175 @@ function SurveyEditor({ user }) {
 
 function Dashboard({ user }) {
   const [surveys, setSurveys] = useState([]);
-  const [responses, setResponses] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
     axios.get(`http://localhost:5000/api/surveys?userId=${user.uid}`)
-      .then(response => setSurveys(response.data))
+      .then(response => {
+        // Sort surveys by updatedAt (most recent first)
+        const sortedSurveys = response.data.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+        setSurveys(sortedSurveys);
+      })
       .catch(error => console.error('Error fetching surveys:', error));
+  }, [user.uid]);
 
-    axios.get(`http://localhost:5000/api/responses?userId=${user.uid}`)
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <nav className="bg-blue-500 p-4 text-white">
+        <div className="container mx-auto flex justify-between items-center">
+          <h1 className="text-xl font-bold">My NPS Platform</h1>
+          <div>
+            <button onClick={() => navigate('/')} className="mr-4 hover:underline">Create Survey</button>
+            <button onClick={() => signOut(auth)} className="hover:underline">Log Out</button>
+          </div>
+        </div>
+      </nav>
+      <div className="container mx-auto p-6">
+        <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h2 className="text-xl font-semibold mb-4">Your Surveys</h2>
+          {surveys.length === 0 ? (
+            <p>No surveys yet.</p>
+          ) : (
+            <ul className="space-y-4">
+              {surveys.map(survey => (
+                <li key={survey.id} className="border-b py-2">
+                  <Link
+                    to={`/survey/${survey.id}/details`}
+                    className="text-blue-500 hover:underline font-medium text-lg"
+                  >
+                    {survey.title || `Untitled Survey #${survey.id}`}
+                  </Link>
+                  <div className="text-sm text-gray-600 mt-1">
+                    ID: {survey.id} | Questions: {survey.elements.length} | 
+                    Last Updated: {new Date(survey.updatedAt || Date.now()).toLocaleString()}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SurveyDetailPage({ user }) {
+  const { id } = useParams();
+  const [survey, setSurvey] = useState(null);
+  const [responses, setResponses] = useState([]);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    axios.get(`http://localhost:5000/api/surveys/${id}`)
+      .then(response => setSurvey(response.data))
+      .catch(error => {
+        console.error('Error fetching survey:', error);
+        setSurvey(null);
+      });
+
+    axios.get(`http://localhost:5000/api/responses?surveyId=${id}`)
+      .then(response => setResponses(response.data))
+      .catch(error => console.error('Error fetching responses:', error));
+  }, [id]);
+
+  const handleDelete = async () => {
+    if (responses.length > 0) {
+      if (!window.confirm('This survey has responses. Are you sure you want to delete it?')) {
+        return;
+      }
+    }
+    try {
+      await axios.delete(`http://localhost:5000/api/surveys/${id}`);
+      await axios.delete(`http://localhost:5000/api/responses/${id}`);
+      alert('Survey deleted!');
+      navigate('/dashboard');
+    } catch (error) {
+      console.error('Error deleting survey:', error);
+      alert('Failed to delete survey');
+    }
+  };
+
+  if (!survey) return <p>Loading...</p>;
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <nav className="bg-blue-500 p-4 text-white">
+        <div className="container mx-auto flex justify-between items-center">
+          <h1 className="text-xl font-bold">My NPS Platform</h1>
+          <div>
+            <button onClick={() => navigate('/dashboard')} className="mr-4 hover:underline">Dashboard</button>
+            <button onClick={() => signOut(auth)} className="hover:underline">Log Out</button>
+          </div>
+        </div>
+      </nav>
+      <div className="container mx-auto p-6">
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h2 className="text-2xl font-bold mb-4">{survey.title || `Untitled Survey #${survey.id}`}</h2>
+          <div className="flex space-x-4 mb-4">
+            <button
+              onClick={() => navigate(`/survey/${id}/edit`)}
+              className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
+            >
+              Edit Survey
+            </button>
+            <button
+              onClick={handleDelete}
+              className="bg-red-500 text-white p-2 rounded hover:bg-red-600"
+            >
+              Delete Survey
+            </button>
+            <button
+              onClick={() => navigate(`/survey/${id}/responses`)}
+              className="bg-green-500 text-white p-2 rounded hover:bg-green-600"
+            >
+              See Responses
+            </button>
+          </div>
+          <div className="text-sm text-gray-600">
+            <p>ID: {survey.id}</p>
+            <p>Questions: {survey.elements.length}</p>
+            <p>Responses: {responses.length}</p>
+            <p>Last Updated: {new Date(survey.updatedAt || Date.now()).toLocaleString()}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SurveyResponsesPage() {
+  const { id } = useParams();
+  const [survey, setSurvey] = useState(null);
+  const [responses, setResponses] = useState([]);
+  const [viewMode, setViewMode] = useState('summaries'); // 'summaries' or 'single'
+  const [selectedResponse, setSelectedResponse] = useState(null);
+
+  useEffect(() => {
+    axios.get(`http://localhost:5000/api/surveys/${id}`)
+      .then(response => setSurvey(response.data))
+      .catch(error => {
+        console.error('Error fetching survey:', error);
+        setSurvey(null);
+      });
+
+    axios.get(`http://localhost:5000/api/responses?surveyId=${id}`)
       .then(response => {
         console.log('Fetched responses:', response.data);
         setResponses(response.data);
       })
       .catch(error => console.error('Error fetching responses:', error));
-  }, [user.uid]);
+  }, [id]);
 
-  const processSurveyResults = (surveyId) => {
-    const survey = surveys.find(s => s.id === surveyId);
+  const processSurveyResults = () => {
     if (!survey) return null;
 
-    const surveyResponses = responses.filter(r => r.surveyId === surveyId);
     const questions = survey.elements;
-
     const results = questions.map((question, index) => {
-      const questionResponses = surveyResponses
+      const questionResponses = responses
         .filter(r => r.data && r.data[question.name] !== undefined)
         .map(r => r.data[question.name]);
-      const commentResponses = surveyResponses
+      const commentResponses = responses
         .filter(r => r.data && r.data[`${question.name}-Comment`] !== undefined)
         .map(r => r.data[`${question.name}-Comment`]);
 
@@ -404,8 +555,12 @@ function Dashboard({ user }) {
       };
     });
 
-    return { surveyId, questions: results };
+    return { surveyId: id, questions: results };
   };
+
+  if (!survey) return <p>Loading...</p>;
+
+  const results = processSurveyResults();
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -413,91 +568,130 @@ function Dashboard({ user }) {
         <div className="container mx-auto flex justify-between items-center">
           <h1 className="text-xl font-bold">My NPS Platform</h1>
           <div>
-            <button onClick={() => navigate('/')} className="mr-4 hover:underline">Create Survey</button>
+            <Link to={`/survey/${id}/details`} className="mr-4 hover:underline">Back to Survey Details</Link>
+            <Link to="/dashboard" className="mr-4 hover:underline">Dashboard</Link>
             <button onClick={() => signOut(auth)} className="hover:underline">Log Out</button>
           </div>
         </div>
       </nav>
       <div className="container mx-auto p-6">
-        <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-        <div className="grid grid-cols-1 gap-6">
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold mb-4">Your Surveys</h2>
-            {surveys.length === 0 ? (
-              <p>No surveys yet.</p>
-            ) : (
-              <ul className="space-y-4">
-                {surveys.map(survey => (
-                  <li key={survey.id} className="border-b py-2">
-                    <Link
-                      to={`/survey/${survey.id}`}
-                      className="text-blue-500 hover:underline font-medium text-lg"
-                    >
-                      {survey.title || `Untitled Survey #${survey.id}`}
-                    </Link>
-                    <div className="text-sm text-gray-600 mt-1">
-                      ID: {survey.id} | Questions: {survey.elements.length} | 
-                      Last Updated: {new Date(survey.updatedAt || Date.now()).toLocaleString()}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h2 className="text-2xl font-bold mb-4">Responses for: {survey.title || `Untitled Survey #${survey.id}`}</h2>
+          <div className="flex space-x-4 mb-4">
+            <button
+              onClick={() => {
+                setViewMode('summaries');
+                setSelectedResponse(null);
+              }}
+              className={`p-2 rounded ${viewMode === 'summaries' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+            >
+              Question Summaries
+            </button>
+            <button
+              onClick={() => setViewMode('single')}
+              className={`p-2 rounded ${viewMode === 'single' ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+            >
+              Single Responses
+            </button>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow-md">
-            <h2 className="text-xl font-semibold mb-4">Survey Results</h2>
-            {surveys.length === 0 ? (
-              <p>No surveys available to display results.</p>
-            ) : surveys.map(survey => {
-              const results = processSurveyResults(survey.id);
-              if (!results) return null;
-
-              return (
-                <div key={survey.id} className="mb-8">
-                  <h3 className="text-lg font-medium mb-4">Survey: {survey.title || `Untitled Survey #${survey.id}`}</h3>
-                  {results.questions.map((questionResult, index) => (
-                    <div key={index} className="mb-6">
-                      <h4 className="text-md font-semibold">{questionResult.title}</h4>
-                      {questionResult.type === 'radiogroup' || questionResult.type === 'dropdown' || questionResult.type === 'checkbox' ? (
-                        <div className="mt-4">
-                          <Bar
-                            data={questionResult.chartData}
-                            options={{
-                              responsive: true,
-                              plugins: {
-                                legend: { position: 'top' },
-                                title: { display: true, text: 'Response Distribution' },
-                              },
-                            }}
-                          />
-                        </div>
-                      ) : (
-                        <div className="mt-2">
-                          <p className="text-sm font-medium">Responses:</p>
-                          <ul className="list-disc pl-5">
-                            {questionResult.responses.map((resp, idx) => (
-                              <li key={idx} className="text-sm">{resp}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      {questionResult.comments.length > 0 && (
-                        <div className="mt-4">
-                          <p className="text-sm font-medium">Comments:</p>
-                          <ul className="list-disc pl-5">
-                            {questionResult.comments.map((comment, idx) => (
-                              <li key={idx} className="text-sm">{comment}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
+          {viewMode === 'summaries' && results && (
+            <div>
+              {results.questions.map((questionResult, index) => (
+                <div key={index} className="mb-6">
+                  <h4 className="text-md font-semibold">{questionResult.title}</h4>
+                  {questionResult.type === 'radiogroup' || questionResult.type === 'dropdown' || questionResult.type === 'checkbox' ? (
+                    <div className="mt-4">
+                      <Bar
+                        data={questionResult.chartData}
+                        options={{
+                          responsive: true,
+                          plugins: {
+                            legend: { position: 'top' },
+                            title: { display: true, text: 'Response Distribution' },
+                          },
+                        }}
+                      />
                     </div>
-                  ))}
+                  ) : (
+                    <div className="mt-2">
+                      <p className="text-sm font-medium">Responses:</p>
+                      <ul className="list-disc pl-5">
+                        {questionResult.responses.map((resp, idx) => (
+                          <li key={idx} className="text-sm">{resp}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {questionResult.comments.length > 0 && (
+                    <div className="mt-4">
+                      <p className="text-sm font-medium">Comments:</p>
+                      <ul className="list-disc pl-5">
+                        {questionResult.comments.map((comment, idx) => (
+                          <li key={idx} className="text-sm">{comment}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          )}
+
+          {viewMode === 'single' && (
+            <div>
+              {responses.length === 0 ? (
+                <p>No responses yet.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <h3 className="text-lg font-medium mb-4">Responses</h3>
+                    <ul className="space-y-2">
+                      {responses.map((response, index) => (
+                        <li
+                          key={response.id}
+                          className={`p-2 rounded cursor-pointer ${selectedResponse === response ? 'bg-blue-100' : 'bg-gray-100'}`}
+                          onClick={() => setSelectedResponse(response)}
+                        >
+                          Response {index + 1}
+                          <div className="text-sm text-gray-600">
+                            Started: {new Date(response.timestamp).toLocaleString()}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div>
+                    {selectedResponse ? (
+                      <div>
+                        <h3 className="text-lg font-medium mb-4">Response Details</h3>
+                        <div className="text-sm text-gray-600 mb-4">
+                          <p>Started: {new Date(selectedResponse.timestamp).toLocaleString()}</p>
+                          {/* IP Address placeholder (not captured currently) */}
+                          <p>IP Address: Not available</p>
+                        </div>
+                        {survey.elements.map((question, index) => (
+                          <div key={index} className="mb-4">
+                            <p className="font-semibold">Q{index + 1}: {question.title}</p>
+                            <p className="text-sm">
+                              {selectedResponse.data[question.name] || 'Not answered'}
+                            </p>
+                            {selectedResponse.data[`${question.name}-Comment`] && (
+                              <p className="text-sm mt-1">
+                                Comment: {selectedResponse.data[`${question.name}-Comment`]}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p>Select a response to view details.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -564,6 +758,18 @@ function App() {
         <Route
           path="/dashboard"
           element={user ? <Dashboard user={user} /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/survey/:id/details"
+          element={user ? <SurveyDetailPage user={user} /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/survey/:id/edit"
+          element={user ? <SurveyEditor user={user} surveyId={useParams().id} initialSurvey={null} /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/survey/:id/responses"
+          element={<SurveyResponsesPage />}
         />
         <Route path="/survey/:id" element={<SurveyPage />} />
       </Routes>

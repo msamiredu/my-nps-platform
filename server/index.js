@@ -74,13 +74,41 @@ app.post('/api/surveys', (req, res) => {
   res.json({ id: newSurvey.id });
 });
 
+app.put('/api/surveys/:id', (req, res) => {
+  const surveyIndex = surveys.findIndex(s => s.id === req.params.id);
+  if (surveyIndex === -1) {
+    return res.status(404).json({ error: 'Survey not found' });
+  }
+  surveys[surveyIndex] = {
+    ...surveys[surveyIndex],
+    ...req.body,
+    updatedAt: req.body.updatedAt || new Date().toISOString()
+  };
+  saveSurveys();
+  res.json({ message: 'Survey updated' });
+});
+
+app.delete('/api/surveys/:id', (req, res) => {
+  surveys = surveys.filter(s => s.id !== req.params.id);
+  saveSurveys();
+  res.json({ message: 'Survey deleted' });
+});
+
 app.get('/api/responses', (req, res) => {
   const userId = req.query.userId;
-  const userResponses = responses.filter(r => {
-    const survey = surveys.find(s => s.id === r.surveyId);
-    return survey && survey.userId === userId;
-  });
-  res.json(userResponses);
+  const surveyId = req.query.surveyId;
+  if (surveyId) {
+    const surveyResponses = responses.filter(r => r.surveyId === surveyId);
+    res.json(surveyResponses);
+  } else if (userId) {
+    const userResponses = responses.filter(r => {
+      const survey = surveys.find(s => s.id === r.surveyId);
+      return survey && survey.userId === userId;
+    });
+    res.json(userResponses);
+  } else {
+    res.status(400).json({ error: 'userId or surveyId required' });
+  }
 });
 
 app.post('/api/responses', (req, res) => {
@@ -92,6 +120,12 @@ app.post('/api/responses', (req, res) => {
   responses.push(newResponse);
   saveResponses();
   res.json({ message: 'Response saved' });
+});
+
+app.delete('/api/responses/:surveyId', (req, res) => {
+  responses = responses.filter(r => r.surveyId !== req.params.surveyId);
+  saveResponses();
+  res.json({ message: 'Responses deleted' });
 });
 
 app.listen(port, () => {
