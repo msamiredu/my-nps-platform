@@ -77,6 +77,7 @@ function SurveyEditor({ user }) {
   const [commentDisplay, setCommentDisplay] = useState('comment');
   const [commentLabel, setCommentLabel] = useState('Other (please specify)');
   const [nonAnswerableText, setNonAnswerableText] = useState('');
+  const [isRequired, setIsRequired] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -140,6 +141,10 @@ function SurveyEditor({ user }) {
       }
     }
 
+    if (questionType !== 'nonanswerable') {
+      newQuestion.isRequired = isRequired;
+    }
+
     const updatedPages = [...surveyJson.pages];
     updatedPages[currentPage].elements.push(newQuestion);
 
@@ -153,6 +158,7 @@ function SurveyEditor({ user }) {
     setCommentDisplay('comment');
     setCommentLabel('Other (please specify)');
     setNonAnswerableText('');
+    setIsRequired(false);
   };
 
   const addSection = () => {
@@ -170,6 +176,15 @@ function SurveyEditor({ user }) {
     const [reorderedItem] = updatedPages[currentPage].elements.splice(result.source.index, 1);
     updatedPages[currentPage].elements.splice(result.destination.index, 0, reorderedItem);
 
+    setSurveyJson({
+      ...surveyJson,
+      pages: updatedPages
+    });
+  };
+
+  const handleDeleteQuestion = (index) => {
+    const updatedPages = [...surveyJson.pages];
+    updatedPages[currentPage].elements.splice(index, 1);
     setSurveyJson({
       ...surveyJson,
       pages: updatedPages
@@ -326,6 +341,13 @@ function SurveyEditor({ user }) {
                   className="h-4 w-4 text-blue-500 focus:ring-blue-500"
                 />
                 <label className="text-sm">Add Comment/Other Box</label>
+                <input
+                  type="checkbox"
+                  checked={isRequired}
+                  onChange={(e) => setIsRequired(e.target.checked)}
+                  className="h-4 w-4 text-blue-500 focus:ring-blue-500 ml-4"
+                />
+                <label className="text-sm">Required</label>
               </div>
             )}
             {hasComment && questionType !== 'nonanswerable' && (
@@ -389,13 +411,23 @@ function SurveyEditor({ user }) {
                                   ref={provided.innerRef}
                                   {...provided.draggableProps}
                                   {...provided.dragHandleProps}
-                                  className="p-2 bg-gray-100 rounded flex items-center"
+                                  className="p-2 bg-gray-100 rounded flex items-center justify-between"
                                 >
-                                  <span className="mr-2">☰</span>
-                                  {element.type === 'html' ? (
-                                    <span dangerouslySetInnerHTML={{ __html: element.html }} />
-                                  ) : (
-                                    <span>{element.title}</span>
+                                  <div className="flex items-center">
+                                    <span className="mr-2">☰</span>
+                                    {element.type === 'html' ? (
+                                      <span dangerouslySetInnerHTML={{ __html: element.html }} />
+                                    ) : (
+                                      <span>{element.title} {element.isRequired && <span className="text-red-500 ml-2">(Required)</span>}</span>
+                                    )}
+                                  </div>
+                                  {element.type !== 'html' && (
+                                    <button
+                                      onClick={() => handleDeleteQuestion(index)}
+                                      className="bg-red-500 text-white p-1 rounded hover:bg-red-600"
+                                    >
+                                      Delete
+                                    </button>
                                   )}
                                 </li>
                               )}
@@ -938,7 +970,7 @@ function SurveyResponsesPage() {
                           }
                           return (
                             <div key={index} className="mb-4">
-                              <p className="font-semibold">Q{index + 1}: {question.title}</p>
+                              <p className="font-semibold">Q{index + 1}: {question.title} {question.isRequired && <span className="text-red-500 ml-2">(Required)</span>}</p>
                               <p className="text-sm">
                                 {selectedResponse.data[question.name] || 'Not answered'}
                               </p>
