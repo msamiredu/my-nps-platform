@@ -7,6 +7,7 @@ import { auth } from './firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
@@ -67,7 +68,8 @@ function LoginPage({ setUser }) {
 
 function SurveyEditor({ user }) {
   const { id } = useParams();
-  const [surveyJson, setSurveyJson] = useState({ elements: [], title: '' });
+  const [surveyJson, setSurveyJson] = useState({ pages: [{ elements: [] }], title: '', showPagesAsSeparate: false });
+  const [currentPage, setCurrentPage] = useState(0);
   const [questionType, setQuestionType] = useState('text');
   const [questionTitle, setQuestionTitle] = useState('');
   const [choices, setChoices] = useState('');
@@ -80,16 +82,23 @@ function SurveyEditor({ user }) {
   useEffect(() => {
     if (id) {
       axios.get(`http://localhost:5000/api/surveys/${id}`)
-        .then(response => setSurveyJson(response.data))
+        .then(response => {
+          const surveyData = response.data;
+          if (!surveyData.pages) {
+            surveyData.pages = [{ elements: surveyData.elements || [] }];
+            delete surveyData.elements;
+          }
+          setSurveyJson(surveyData);
+        })
         .catch(error => {
           console.error('Error fetching survey:', error);
-          setSurveyJson({ elements: [], title: '' });
+          setSurveyJson({ pages: [{ elements: [] }], title: '', showPagesAsSeparate: false });
         });
     }
   }, [id]);
 
   const addQuestion = () => {
-    let newQuestion = { name: `q${surveyJson.elements.length + 1}`, title: questionTitle };
+    let newQuestion = { name: `q${surveyJson.pages[currentPage].elements.length + 1}`, title: questionTitle };
 
     switch (questionType) {
       case 'text':
@@ -114,7 +123,7 @@ function SurveyEditor({ user }) {
           : ['Choice 1', 'Choice 2', 'Choice 3'].map(ch => ({ value: ch, text: ch }));
         break;
       case 'nonanswerable':
-        newQuestion.type = 'html'; // Use 'html' type for non-answerable content
+        newQuestion.type = 'html';
         newQuestion.html = nonAnswerableText;
         break;
       default:
@@ -131,9 +140,12 @@ function SurveyEditor({ user }) {
       }
     }
 
+    const updatedPages = [...surveyJson.pages];
+    updatedPages[currentPage].elements.push(newQuestion);
+
     setSurveyJson({
       ...surveyJson,
-      elements: [...surveyJson.elements, newQuestion]
+      pages: updatedPages
     });
     setQuestionTitle('');
     setChoices('');
@@ -143,27 +155,49 @@ function SurveyEditor({ user }) {
     setNonAnswerableText('');
   };
 
+  const addSection = () => {
+    setSurveyJson({
+      ...surveyJson,
+      pages: [...surveyJson.pages, { elements: [] }]
+    });
+    setCurrentPage(surveyJson.pages.length);
+  };
+
+  const handleDragEnd = (result) => {
+    if (!result.destination) return;
+
+    const updatedPages = [...surveyJson.pages];
+    const [reorderedItem] = updatedPages[currentPage].elements.splice(result.source.index, 1);
+    updatedPages[currentPage].elements.splice(result.destination.index, 0, reorderedItem);
+
+    setSurveyJson({
+      ...surveyJson,
+      pages: updatedPages
+    });
+  };
+
   const saveSurvey = async () => {
     if (!surveyJson.title.trim()) {
       alert('Please enter a survey title.');
       return;
     }
     try {
+      const surveyToSave = {
+        ...surveyJson,
+        userId: user.uid
+      };
       if (id) {
         await axios.put(`http://localhost:5000/api/surveys/${id}`, {
-          ...surveyJson,
-          userId: user.uid,
+          ...surveyToSave,
           updatedAt: new Date().toISOString()
         });
         alert('Survey updated!');
       } else {
-        const response = await axios.post('http://localhost:5000/api/surveys', {
-          ...surveyJson,
-          userId: user.uid
-        });
+        const response = await axios.post('http://localhost:5000/api/surveys', surveyToSave);
         alert(`Survey saved! Share this link: http://localhost:3000/survey/${response.data.id}`);
       }
-      setSurveyJson({ elements: [], title: '' });
+      setSurveyJson({ pages: [{ elements: [] }], title: '', showPagesAsSeparate: false });
+      setCurrentPage(0);
       navigate('/dashboard');
     } catch (error) {
       console.error('Error saving survey:', error);
@@ -190,6 +224,11 @@ function SurveyEditor({ user }) {
     }
   };
 
+  const displaySurveyJson = surveyJson.showPagesAsSeparate ? surveyJson : {
+    ...surveyJson,
+    pages: [{ elements: surveyJson.pages.flatMap(page => page.elements) }]
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       <nav className="bg-blue-500 p-4 text-white">
@@ -212,7 +251,33 @@ function SurveyEditor({ user }) {
               placeholder="Enter survey title"
               className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <h3 className="text-lg font-medium mt-4">Add a Question or Content</h3>
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                checked={surveyJson.showPagesAsSeparate}
+                onChange={(e) => setSurveyJson({ ...surveyJson, showPagesAsSeparate: e.target.checked })}
+                className="h-4 w-4 text-blue-500 focus:ring-blue-500"
+              />
+              <label className="text-sm">Show sections as separate pages</label>
+            </div>
+            <div className="flex space-x-2">
+              {surveyJson.pages.map((page, index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentPage(index)}
+                  className={`p-2 rounded ${currentPage === index ? 'bg-blue-500 text-white' : 'bg-gray-200'}`}
+                >
+                  Section {index + 1}
+                </button>
+              ))}
+              <button
+                onClick={addSection}
+                className="p-2 bg-green-500 text-white rounded hover:bg-green-600"
+              >
+                Add Section
+              </button>
+            </div>
+            <h3 className="text-lg font-medium mt-4">Add a Question or Content to Section {currentPage + 1}</h3>
             <div className="flex space-x-4">
               <select
                 value={questionType}
@@ -307,9 +372,43 @@ function SurveyEditor({ user }) {
               </button>
             </div>
           </div>
-          {surveyJson.elements.length > 0 && (
+          {surveyJson.pages.some(page => page.elements.length > 0) && (
             <div className="mt-6">
-              <Survey json={surveyJson} onComplete={onComplete} />
+              <h3 className="text-lg font-medium mb-2">Survey Preview</h3>
+              {surveyJson.pages.map((page, pageIndex) => (
+                <div key={pageIndex} className="mb-4">
+                  <h4 className="text-md font-semibold">Section {pageIndex + 1}</h4>
+                  <DragDropContext onDragEnd={handleDragEnd}>
+                    <Droppable droppableId={`page-${pageIndex}`}>
+                      {(provided) => (
+                        <ul {...provided.droppableProps} ref={provided.innerRef} className="space-y-2">
+                          {page.elements.map((element, index) => (
+                            <Draggable key={`${pageIndex}-${index}`} draggableId={`${pageIndex}-${index}`} index={index}>
+                              {(provided) => (
+                                <li
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  {...provided.dragHandleProps}
+                                  className="p-2 bg-gray-100 rounded flex items-center"
+                                >
+                                  <span className="mr-2">☰</span>
+                                  {element.type === 'html' ? (
+                                    <span dangerouslySetInnerHTML={{ __html: element.html }} />
+                                  ) : (
+                                    <span>{element.title}</span>
+                                  )}
+                                </li>
+                              )}
+                            </Draggable>
+                          ))}
+                          {provided.placeholder}
+                        </ul>
+                      )}
+                    </Droppable>
+                  </DragDropContext>
+                </div>
+              ))}
+              <Survey json={displaySurveyJson} onComplete={onComplete} />
             </div>
           )}
         </div>
@@ -379,16 +478,24 @@ function Dashboard({ user }) {
                       {survey.title || `Untitled Survey #${survey.id}`}
                     </Link>
                     <div className="text-sm text-gray-600 mt-1">
-                      ID: {survey.id} | Questions: {survey.elements.length} | 
+                      ID: {survey.id} | Questions: {survey.pages ? survey.pages.reduce((total, page) => total + page.elements.length, 0) : 0} | 
                       Last Updated: {new Date(survey.updatedAt || Date.now()).toLocaleString()}
                     </div>
                   </div>
-                  <button
-                    onClick={() => handleDuplicate(survey)}
-                    className="bg-yellow-500 text-white p-2 rounded hover:bg-yellow-600"
-                  >
-                    Duplicate
-                  </button>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => handleDuplicate(survey)}
+                      className="bg-yellow-500 text-white p-2 rounded hover:bg-yellow-600"
+                    >
+                      Duplicate
+                    </button>
+                    <button
+                      onClick={() => navigate(`/survey/${survey.id}/send`)}
+                      className="bg-purple-500 text-white p-2 rounded hover:bg-purple-600"
+                    >
+                      Send Survey
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -489,6 +596,12 @@ function SurveyDetailPage({ user }) {
               Duplicate
             </button>
             <button
+              onClick={() => navigate(`/survey/${id}/send`)}
+              className="bg-purple-500 text-white p-2 rounded hover:bg-purple-600"
+            >
+              Send Survey
+            </button>
+            <button
               onClick={() => navigate(`/survey/${id}/responses`)}
               className="bg-green-500 text-white p-2 rounded hover:bg-green-600"
             >
@@ -497,9 +610,56 @@ function SurveyDetailPage({ user }) {
           </div>
           <div className="text-sm text-gray-600">
             <p>ID: {survey.id}</p>
-            <p>Questions: {survey.elements.length}</p>
+            <p>Questions: {survey.pages ? survey.pages.reduce((total, page) => total + page.elements.length, 0) : 0}</p>
             <p>Responses: {responses.length}</p>
             <p>Last Updated: {new Date(survey.updatedAt || Date.now()).toLocaleString()}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SurveySendPage() {
+  const { id } = useParams();
+  const surveyLink = `http://localhost:3000/survey/${id}`;
+  const navigate = useNavigate();
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(surveyLink)
+      .then(() => alert('Link copied to clipboard!'))
+      .catch(err => console.error('Failed to copy:', err));
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-100">
+      <nav className="bg-blue-500 p-4 text-white">
+        <div className="container mx-auto flex justify-between items-center">
+          <h1 className="text-xl font-bold">My NPS Platform</h1>
+          <div>
+            <button onClick={() => navigate(`/survey/${id}/details`)} className="mr-4 hover:underline">Back to Survey Details</button>
+            <button onClick={() => navigate('/dashboard')} className="mr-4 hover:underline">Dashboard</button>
+            <button onClick={() => signOut(auth)} className="hover:underline">Log Out</button>
+          </div>
+        </div>
+      </nav>
+      <div className="container mx-auto p-6">
+        <div className="bg-white p-6 rounded-lg shadow-md">
+          <h2 className="text-2xl font-bold mb-4">Send Survey</h2>
+          <div className="flex items-center space-x-4">
+            <label className="font-medium">Web Link:</label>
+            <input
+              type="text"
+              value={surveyLink}
+              readOnly
+              className="flex-1 p-2 border rounded focus:outline-none"
+            />
+            <button
+              onClick={copyToClipboard}
+              className="bg-blue-500 text-white p-2 rounded hover:bg-blue-600"
+            >
+              Copy
+            </button>
           </div>
         </div>
       </div>
@@ -516,7 +676,14 @@ function SurveyResponsesPage() {
 
   useEffect(() => {
     axios.get(`http://localhost:5000/api/surveys/${id}`)
-      .then(response => setSurvey(response.data))
+      .then(response => {
+        const surveyData = response.data;
+        if (!surveyData.pages) {
+          surveyData.pages = [{ elements: surveyData.elements || [] }];
+          delete surveyData.elements;
+        }
+        setSurvey(surveyData);
+      })
       .catch(error => {
         console.error('Error fetching survey:', error);
         setSurvey(null);
@@ -533,7 +700,7 @@ function SurveyResponsesPage() {
   const processSurveyResults = () => {
     if (!survey) return null;
 
-    const questions = survey.elements;
+    const questions = survey.pages.flatMap(page => page.elements);
     const results = questions.map((question, index) => {
       if (question.type === 'html') {
         return {
@@ -765,9 +932,9 @@ function SurveyResponsesPage() {
                           <p>Started: {new Date(selectedResponse.timestamp).toLocaleString()}</p>
                           <p>IP Address: Not available</p>
                         </div>
-                        {survey.elements.map((question, index) => {
+                        {survey.pages.flatMap(page => page.elements).map((question, index) => {
                           if (question.type === 'html') {
-                            return null; // Skip non-answerable content in response view
+                            return null;
                           }
                           return (
                             <div key={index} className="mb-4">
@@ -804,10 +971,20 @@ function SurveyPage() {
 
   useEffect(() => {
     axios.get(`http://localhost:5000/api/surveys/${id}`)
-      .then(response => setSurveyJson(response.data))
+      .then(response => {
+        const surveyData = response.data;
+        if (!surveyData.pages) {
+          surveyData.pages = [{ elements: surveyData.elements || [] }];
+          delete surveyData.elements;
+        }
+        if (!surveyData.showPagesAsSeparate) {
+          surveyData.showPagesAsSeparate = false;
+        }
+        setSurveyJson(surveyData);
+      })
       .catch(error => {
         console.error('Error fetching survey:', error);
-        setSurveyJson({ elements: [{ type: 'text', name: 'error', title: 'Survey not found' }] });
+        setSurveyJson({ pages: [{ elements: [{ type: 'text', name: 'error', title: 'Survey not found' }] }] });
       });
   }, [id]);
 
@@ -828,11 +1005,18 @@ function SurveyPage() {
     }
   };
 
+  if (!surveyJson) return <p>Loading...</p>;
+
+  const displaySurveyJson = surveyJson.showPagesAsSeparate ? surveyJson : {
+    ...surveyJson,
+    pages: [{ elements: surveyJson.pages.flatMap(page => page.elements) }]
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center">
       <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-2xl">
         <h1 className="text-2xl font-bold mb-6 text-center">{surveyJson?.title || 'Untitled Survey'}</h1>
-        {surveyJson ? <Survey json={surveyJson} onComplete={onComplete} /> : <p>Loading...</p>}
+        <Survey json={displaySurveyJson} onComplete={onComplete} />
       </div>
     </div>
   );
@@ -866,6 +1050,10 @@ function App() {
         <Route
           path="/survey/:id/edit"
           element={user ? <SurveyEditor user={user} /> : <Navigate to="/" />}
+        />
+        <Route
+          path="/survey/:id/send"
+          element={user ? <SurveySendPage /> : <Navigate to="/" />}
         />
         <Route
           path="/survey/:id/responses"
