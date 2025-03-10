@@ -1,6 +1,3 @@
-// At the top of src/App.js, add this line after other imports
-axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
-
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, useParams, Navigate, useNavigate, Link } from 'react-router-dom';
 import { Survey } from 'survey-react';
@@ -14,6 +11,9 @@ import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+
+// Set Axios base URL after imports
+axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
 
 function LoginPage({ setUser }) {
   const [email, setEmail] = useState('');
