@@ -1,3 +1,6 @@
+// At the top of src/App.js, add this line after other imports
+axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Route, Routes, useParams, Navigate, useNavigate, Link } from 'react-router-dom';
 import { Survey } from 'survey-react';

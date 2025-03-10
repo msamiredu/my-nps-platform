@@ -2,54 +2,30 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const app = express();
-const port = 5000;
-
 app.use(cors());
 app.use(express.json());
 
-// Surveys data
 let surveys = [];
 let responses = [];
 
-// Load surveys from file
-const loadSurveys = () => {
-  try {
-    const data = fs.readFileSync('surveys.json', 'utf8');
-    surveys = JSON.parse(data);
-  } catch (error) {
-    surveys = [];
-  }
-};
+try {
+  surveys = JSON.parse(fs.readFileSync('surveys.json', 'utf8'));
+} catch (error) {
+  surveys = [];
+  fs.writeFileSync('surveys.json', JSON.stringify(surveys));
+}
 
-// Load responses from file
-const loadResponses = () => {
-  try {
-    const data = fs.readFileSync('responses.json', 'utf8');
-    responses = JSON.parse(data);
-  } catch (error) {
-    responses = [];
-  }
-};
+try {
+  responses = JSON.parse(fs.readFileSync('responses.json', 'utf8'));
+} catch (error) {
+  responses = [];
+  fs.writeFileSync('responses.json', JSON.stringify(responses));
+}
 
-// Save surveys to file
-const saveSurveys = () => {
-  fs.writeFileSync('surveys.json', JSON.stringify(surveys, null, 2));
-};
-
-// Save responses to file
-const saveResponses = () => {
-  fs.writeFileSync('responses.json', JSON.stringify(responses, null, 2));
-};
-
-// Initial load
-loadSurveys();
-loadResponses();
-
-// API endpoints
 app.get('/api/surveys', (req, res) => {
   const userId = req.query.userId;
-  const userSurveys = surveys.filter(s => s.userId === userId);
-  res.json(userSurveys);
+  const filteredSurveys = userId ? surveys.filter(s => s.userId === userId) : surveys;
+  res.json(filteredSurveys);
 });
 
 app.get('/api/surveys/:id', (req, res) => {
@@ -57,77 +33,62 @@ app.get('/api/surveys/:id', (req, res) => {
   if (survey) {
     res.json(survey);
   } else {
-    res.status(404).json({ error: 'Survey not found' });
+    res.status(404).json({ message: 'Survey not found' });
   }
 });
 
 app.post('/api/surveys', (req, res) => {
-  const newSurvey = {
-    id: Date.now().toString(),
-    ...req.body,
-    userId: req.body.userId,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
-  };
+  const newSurvey = { ...req.body, id: Date.now().toString(), createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   surveys.push(newSurvey);
-  saveSurveys();
-  res.json({ id: newSurvey.id });
+  fs.writeFileSync('surveys.json', JSON.stringify(surveys));
+  res.json(newSurvey);
 });
 
 app.put('/api/surveys/:id', (req, res) => {
-  const surveyIndex = surveys.findIndex(s => s.id === req.params.id);
-  if (surveyIndex === -1) {
-    return res.status(404).json({ error: 'Survey not found' });
+  const index = surveys.findIndex(s => s.id === req.params.id);
+  if (index !== -1) {
+    surveys[index] = { ...req.body, id: req.params.id, updatedAt: new Date().toISOString() };
+    fs.writeFileSync('surveys.json', JSON.stringify(surveys));
+    res.json(surveys[index]);
+  } else {
+    res.status(404).json({ message: 'Survey not found' });
   }
-  surveys[surveyIndex] = {
-    ...surveys[surveyIndex],
-    ...req.body,
-    updatedAt: req.body.updatedAt || new Date().toISOString()
-  };
-  saveSurveys();
-  res.json({ message: 'Survey updated' });
 });
 
 app.delete('/api/surveys/:id', (req, res) => {
+  const initialLength = surveys.length;
   surveys = surveys.filter(s => s.id !== req.params.id);
-  saveSurveys();
-  res.json({ message: 'Survey deleted' });
-});
-
-app.get('/api/responses', (req, res) => {
-  const userId = req.query.userId;
-  const surveyId = req.query.surveyId;
-  if (surveyId) {
-    const surveyResponses = responses.filter(r => r.surveyId === surveyId);
-    res.json(surveyResponses);
-  } else if (userId) {
-    const userResponses = responses.filter(r => {
-      const survey = surveys.find(s => s.id === r.surveyId);
-      return survey && survey.userId === userId;
-    });
-    res.json(userResponses);
+  if (surveys.length < initialLength) {
+    fs.writeFileSync('surveys.json', JSON.stringify(surveys));
+    res.json({ message: 'Survey deleted' });
   } else {
-    res.status(400).json({ error: 'userId or surveyId required' });
+    res.status(404).json({ message: 'Survey not found' });
   }
 });
 
+app.get('/api/responses', (req, res) => {
+  const surveyId = req.query.surveyId;
+  const filteredResponses = surveyId ? responses.filter(r => r.surveyId === surveyId) : responses;
+  res.json(filteredResponses);
+});
+
 app.post('/api/responses', (req, res) => {
-  const newResponse = {
-    id: Date.now().toString(),
-    ...req.body,
-    timestamp: new Date().toISOString()
-  };
+  const newResponse = { ...req.body, id: Date.now().toString(), timestamp: new Date().toISOString() };
   responses.push(newResponse);
-  saveResponses();
-  res.json({ message: 'Response saved' });
+  fs.writeFileSync('responses.json', JSON.stringify(responses));
+  res.json(newResponse);
 });
 
-app.delete('/api/responses/:surveyId', (req, res) => {
-  responses = responses.filter(r => r.surveyId !== req.params.surveyId);
-  saveResponses();
-  res.json({ message: 'Responses deleted' });
+app.delete('/api/responses/:id', (req, res) => {
+  const initialLength = responses.length;
+  responses = responses.filter(r => r.surveyId !== req.params.id);
+  if (responses.length < initialLength) {
+    fs.writeFileSync('responses.json', JSON.stringify(responses));
+    res.json({ message: 'Responses deleted' });
+  } else {
+    res.status(404).json({ message: 'Responses not found' });
+  }
 });
 
-app.listen(port, () => {
-  console.log(`Server running at http://localhost:${port}`);
-});
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
