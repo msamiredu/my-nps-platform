@@ -26,8 +26,8 @@ import { CSS } from '@dnd-kit/utilities';
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-// Set Axios base URL (once)
-axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+// Set Axios base URL explicitly for local development
+axios.defaults.baseURL = 'http://localhost:5000';
 
 function LoginPage({ setUser }) {
   const [email, setEmail] = useState('');
@@ -235,14 +235,14 @@ function SurveyEditor({ user }) {
         });
         alert('Survey updated!');
       } else {
-        const response = await axios.post('/api/surveys', surveyToSave);
+        const response = await axios.post('http://localhost:5000/api/surveys', surveyToSave);
         alert(`Survey saved! Share this link: ${window.location.origin}/survey/${response.data.id}`);
       }
       setSurveyJson({ pages: [{ elements: [] }], title: '', showPagesAsSeparate: false });
       setCurrentPage(0);
       navigate('/dashboard');
     } catch (error) {
-      console.error('Error saving survey:', error);
+      console.error('Error saving survey:', error.response ? error.response.data : error.message);
       alert('Failed to save survey');
     }
   };
@@ -260,7 +260,7 @@ function SurveyEditor({ user }) {
         });
         alert('Response saved!');
       } catch (error) {
-        console.error('Error saving response:', error);
+        console.error('Error saving response:', error.response ? error.response.data : error.message);
         alert('Failed to save response');
       }
     }
@@ -508,7 +508,7 @@ function Dashboard({ user }) {
         const sortedSurveys = response.data.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
         setSurveys(sortedSurveys);
       })
-      .catch(error => console.error('Error fetching surveys:', error));
+      .catch(error => console.error('Error fetching surveys:', error.response ? error.response.data : error.message));
   }, [user.uid]);
 
   const handleDuplicate = async (survey) => {
@@ -525,7 +525,7 @@ function Dashboard({ user }) {
       setSurveys(response.data.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)));
       alert('Survey duplicated!');
     } catch (error) {
-      console.error('Error duplicating survey:', error);
+      console.error('Error duplicating survey:', error.response ? error.response.data : error.message);
       alert('Failed to duplicate survey');
     }
   };
@@ -597,13 +597,13 @@ function SurveyDetailPage({ user }) {
     axios.get(`/api/surveys/${id}`)
       .then(response => setSurvey(response.data))
       .catch(error => {
-        console.error('Error fetching survey:', error);
+        console.error('Error fetching survey:', error.response ? error.response.data : error.message);
         setSurvey(null);
       });
 
     axios.get(`/api/responses?surveyId=${id}`)
       .then(response => setResponses(response.data))
-      .catch(error => console.error('Error fetching responses:', error));
+      .catch(error => console.error('Error fetching responses:', error.response ? error.response.data : error.message));
   }, [id]);
 
   const handleDelete = async () => {
@@ -618,7 +618,7 @@ function SurveyDetailPage({ user }) {
       alert('Survey deleted!');
       navigate('/dashboard');
     } catch (error) {
-      console.error('Error deleting survey:', error);
+      console.error('Error deleting survey:', error.response ? error.response.data : error.message);
       alert('Failed to delete survey');
     }
   };
@@ -636,7 +636,7 @@ function SurveyDetailPage({ user }) {
       alert('Survey duplicated!');
       navigate('/dashboard');
     } catch (error) {
-      console.error('Error duplicating survey:', error);
+      console.error('Error duplicating survey:', error.response ? error.response.data : error.message);
       alert('Failed to duplicate survey');
     }
   };
@@ -766,7 +766,7 @@ function SurveyResponsesPage() {
         setSurvey(surveyData);
       })
       .catch(error => {
-        console.error('Error fetching survey:', error);
+        console.error('Error fetching survey:', error.response ? error.response.data : error.message);
         setSurvey(null);
       });
 
@@ -775,7 +775,7 @@ function SurveyResponsesPage() {
         console.log('Fetched responses:', response.data);
         setResponses(response.data);
       })
-      .catch(error => console.error('Error fetching responses:', error));
+      .catch(error => console.error('Error fetching responses:', error.response ? error.response.data : error.message));
   }, [id]);
 
   const processSurveyResults = () => {
@@ -1060,7 +1060,7 @@ function SurveyPage() {
         setSurveyJson(surveyData);
       })
       .catch(error => {
-        console.error('Error fetching survey:', error);
+        console.error('Error fetching survey:', error.response ? error.response.data : error.message);
         setSurveyJson({ pages: [{ elements: [{ type: 'text', name: 'error', title: 'Survey not found' }] }] });
       });
   }, [id]);
@@ -1077,7 +1077,7 @@ function SurveyPage() {
       });
       alert('Response saved!');
     } catch (error) {
-      console.error('Error saving response:', error);
+      console.error('Error saving response:', error.response ? error.response.data : error.message);
       alert('Failed to save response');
     }
   };
