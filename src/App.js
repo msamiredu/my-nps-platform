@@ -117,14 +117,17 @@ function SurveyEditor({ user }) {
           setSurveyJson(surveyData);
         })
         .catch(error => {
-          console.error('Error fetching survey:', error);
+          console.error('Error fetching survey:', error.response ? error.response.data : error.message);
           setSurveyJson({ pages: [{ elements: [] }], title: '', showPagesAsSeparate: false });
         });
     }
   }, [id]);
 
   const addQuestion = () => {
-    let newQuestion = { name: `q${surveyJson.pages[currentPage].elements.length + 1}`, title: questionTitle };
+    let newQuestion = { 
+      name: `q${Date.now()}-${surveyJson.pages[currentPage].elements.length + 1}`, // Unique name with timestamp
+      title: questionTitle 
+    };
 
     switch (questionType) {
       case 'text':
@@ -235,7 +238,7 @@ function SurveyEditor({ user }) {
         });
         alert('Survey updated!');
       } else {
-        const response = await axios.post('http://localhost:5000/api/surveys', surveyToSave);
+        const response = await axios.post('/api/surveys', surveyToSave);
         alert(`Survey saved! Share this link: ${window.location.origin}/survey/${response.data.id}`);
       }
       setSurveyJson({ pages: [{ elements: [] }], title: '', showPagesAsSeparate: false });
