@@ -125,7 +125,7 @@ function SurveyEditor({ user }) {
 
   const addQuestion = () => {
     let newQuestion = { 
-      name: `q${Date.now()}-${surveyJson.pages[currentPage].elements.length + 1}`, // Unique name with timestamp
+      name: `q${Date.now()}-${surveyJson.pages[currentPage].elements.length + 1}`,
       title: questionTitle 
     };
 
@@ -212,9 +212,11 @@ function SurveyEditor({ user }) {
     }
   };
 
-  const handleDeleteQuestion = (index) => {
+  const handleDeleteQuestion = (questionName) => {
     const updatedPages = [...surveyJson.pages];
-    updatedPages[currentPage].elements.splice(index, 1);
+    updatedPages[currentPage].elements = updatedPages[currentPage].elements.filter(
+      (element) => element.name !== questionName
+    );
     setSurveyJson({
       ...surveyJson,
       pages: updatedPages
@@ -465,7 +467,7 @@ function SurveyEditor({ user }) {
                   <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                     <SortableContext items={page.elements.map(el => el.name)}>
                       <ul className="space-y-2">
-                        {page.elements.map((element, index) => (
+                        {page.elements.map((element) => (
                           <SortableItem key={element.name} id={element.name}>
                             <div className="p-2 bg-gray-100 rounded flex items-center justify-between">
                               <div className="flex items-center">
@@ -478,7 +480,7 @@ function SurveyEditor({ user }) {
                               </div>
                               {element.type !== 'html' && (
                                 <button
-                                  onClick={() => handleDeleteQuestion(index)}
+                                  onClick={() => handleDeleteQuestion(element.name)}
                                   className="bg-red-500 text-white p-1 rounded hover:bg-red-600 transition duration-200"
                                 >
                                   Delete
@@ -533,6 +535,29 @@ function Dashboard({ user }) {
     }
   };
 
+  const handleDelete = async (surveyId) => {
+    try {
+      const response = await axios.get(`/api/responses?surveyId=${surveyId}`);
+      const responses = response.data;
+
+      if (responses.length > 0) {
+        if (!window.confirm('This survey has responses. Are you sure you want to delete it?')) {
+          return;
+        }
+      }
+
+      await axios.delete(`/api/surveys/${surveyId}`);
+      await axios.delete(`/api/responses/${surveyId}`);
+
+      const updatedSurveys = await axios.get(`/api/surveys?userId=${user.uid}`);
+      setSurveys(updatedSurveys.data.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)));
+      alert('Survey deleted!');
+    } catch (error) {
+      console.error('Error deleting survey:', error.response ? error.response.data : error.message);
+      alert('Failed to delete survey');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       <nav className="bg-blue-500 p-4 text-white shadow-md">
@@ -578,6 +603,12 @@ function Dashboard({ user }) {
                       className="bg-purple-500 text-white p-2 rounded hover:bg-purple-600 transition duration-200"
                     >
                       Send Survey
+                    </button>
+                    <button
+                      onClick={() => handleDelete(survey.id)}
+                      className="bg-red-500 text-white p-2 rounded hover:bg-red-600 transition duration-200"
+                    >
+                      Delete
                     </button>
                   </div>
                 </li>
@@ -797,7 +828,7 @@ function SurveyResponsesPage() {
       const questionResponses = responses
         .filter(r => r.data && r.data[question.name] !== undefined)
         .map(r => r.data[question.name])
-        .filter(response => response !== undefined); // Handle undefined responses
+        .filter(response => response !== undefined);
       const commentResponses = responses
         .filter(r => r.data && r.data[`${question.name}-Comment`] !== undefined)
         .map(r => r.data[`${question.name}-Comment`])
